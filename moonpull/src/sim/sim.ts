@@ -125,7 +125,7 @@ export class Sim {
   usePower() {
     if (this.powerCd > 0 || this.cfg.power === 'none' || this.done !== 'no') return;
     if (this.cfg.power === 'spring') {
-      for (let i = 0; i < this.n; i++) { const d = ((this.i0 + i) * DX - this.moonX) / 120; this.v[i] -= 330 * Math.exp(-d * d); }
+      for (let i = 0; i < this.n; i++) { const d = ((this.i0 + i) * DX - this.moonX) / 115; this.v[i] -= 620 * Math.exp(-d * d); }
       this.powerMax = this.powerCd = 11;
     } else {
       this.stillT = 2.4; this.powerMax = this.powerCd = 13;

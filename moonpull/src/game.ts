@@ -13,7 +13,7 @@ import { SCENES, drawPanel } from './story';
 export type Mode = 'night' | 'endless' | 'daily' | 'drift' | 'attract';
 export interface Result {
   mode: Mode; night: number; win: boolean; time: number; par: number; flies: number; fliesTotal: number; score: number; near: number; peak: number;
-  mask: number; oldMask: number; earned: number; xp: number; best: boolean; dist: number; unlocks: string[]; canRevive: boolean;
+  mask: number; oldMask: number; earned: number; xp: number; best: boolean; dist: number; unlocks: string[]; canRevive: boolean; quit?: boolean;
 }
 
 const HINTS: Record<string, string> = {
@@ -222,7 +222,7 @@ export class Game {
   quitRun(): Result | null {
     const sim = this.sim; if (!sim || this.ended || this.mode === 'attract') return null;
     this.ended = true;
-    const r: Result = { mode: this.mode, night: this.night, win: this.mode === 'drift', time: sim.t, par: 0, flies: sim.fliesGot, fliesTotal: sim.fliesTotal, score: Math.round(sim.score), near: sim.nearCount, peak: Math.floor(sim.multPeak), mask: 0, oldMask: 0, earned: 0, xp: 0, best: false, dist: Math.round(sim.boat.x / 10), unlocks: [], canRevive: false };
+    const r: Result = { mode: this.mode, night: this.night, win: this.mode === 'drift', time: sim.t, par: 0, flies: sim.fliesGot, fliesTotal: sim.fliesTotal, score: Math.round(sim.score), near: sim.nearCount, peak: Math.floor(sim.multPeak), mask: 0, oldMask: 0, earned: 0, xp: 0, best: false, dist: Math.round(sim.boat.x / 10), unlocks: [], canRevive: false, quit: true };
     if (this.mode === 'night') return null;
     this.commit(r); return r;
   }

@@ -16,6 +16,10 @@ export function onPause(fn: () => void) {
   document.addEventListener('visibilitychange', () => { if (document.hidden) fn(); });
   if (native) App.addListener('appStateChange', s => { if (!s.isActive) fn(); });
 }
+export function onResume(fn: () => void) {
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) fn(); });
+  if (native) App.addListener('appStateChange', s => { if (s.isActive) fn(); });
+}
 export function exitApp() { if (native) App.exitApp(); }
 
 /** Share a canvas snapshot. Uses the native share sheet in the app, the Web Share API in browsers. Returns false if nothing could be shared. */

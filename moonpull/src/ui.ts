@@ -4,7 +4,7 @@ import { BOATS } from './sim/boats';
 import { INKS, LANTERNS } from './palettes';
 import { save, persist, starCount, totalStars, nightUnlocked, modeUnlocked, COAST_NEED, rankProgress, rankOf, hasBoat, hasPower, UPGRADES, buyUpgrade, buyInk, buyLantern, missionText, claimMission, dailyAvailable, claimDaily, DAILY_GIFT, resetAll, today, RANKS } from './state';
 import { sfx, initAudio, applyVolumes, suspendAudio } from './audio';
-import { shareCanvas, onBack, onPause, exitApp, buzz } from './platform';
+import { shareCanvas, onBack, onPause, onResume, exitApp, buzz } from './platform';
 import { Sim } from './sim/sim';
 
 const $ = (id: string) => document.getElementById(id)!;
@@ -118,7 +118,7 @@ const screens: Record<string, (a: any) => string> = {
       <footer><button class="btn" data-a="norevive">Let it go</button><button class="btn pri" data-a="revive"><i class="fly"></i>40 &middot; Relight</button></footer></div></div>`,
   result: (r: Result) => {
     const rp = rankProgress(); const night = r.mode === 'night';
-    const title = night ? (r.win ? 'Harbour reached' : 'The lantern went out') : r.mode === 'drift' ? 'Drift ended' : r.mode === 'daily' ? (r.win ? 'Daily Tide finished' : 'The lantern went out') : 'The lantern went out';
+    const title = r.quit && r.mode !== 'drift' ? 'Run ended' : night ? (r.win ? 'Harbour reached' : 'The lantern went out') : r.mode === 'drift' ? 'Drift ended' : r.mode === 'daily' ? (r.win ? 'Daily Tide finished' : 'The lantern went out') : 'The lantern went out';
     const newMask = r.mask & ~r.oldMask;
     const starRow = night && r.win ? `<div class="bigstars">${[1, 2, 4].map((b, k) => `<i class="star ${(r.mask | r.oldMask) & b ? 'on' : ''} ${r.mask & b ? 'pop' : ''}" style="animation-delay:${0.25 + k * 0.3}s" data-s="${r.mask & b ? k : ''}"></i>`).join('')}</div>` : '';
     const s = (v: string | number, l: string) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`;
@@ -239,7 +239,7 @@ export function initUI(g: Game) {
     actions.go(screen === 'pre' ? 'map' : 'title');
   });
   onPause(() => { if (screen === '' && game.sim && !game.ended && !game.story && game.mode !== 'attract') { game.setPaused(true); go('pause'); } suspendAudio(true); });
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) suspendAudio(false); });
+  onResume(() => suspendAudio(false));
   attract(); go('title');
   if (dailyAvailable() && save.stats.nights > 0) setTimeout(() => toast('A daily gift is waiting in Tasks'), 800);
 }
