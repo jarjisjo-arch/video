@@ -155,7 +155,7 @@ function attract() { game.start('attract'); $('hud').hidden = true; $('hint').hi
 function setupHud() {
   const sim = game.sim!; const p = $('power');
   p.hidden = sim.cfg.power === 'none'; p.classList.toggle('left', save.settings.left);
-  $('plabel').textContent = sim.cfg.power === 'spring' ? 'SPRING TIDE' : 'STILL WATER';
+  $('plabel').innerHTML = sim.cfg.power === 'spring' ? 'SPRING<br>TIDE' : 'STILL<br>WATER';
   $('prog').hidden = !isFinite(sim.level.length);
   lastHud = '';
 }
