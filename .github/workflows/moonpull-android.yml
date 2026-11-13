@@ -1,0 +1,53 @@
+name: Moonpull Android build
+
+on:
+  push:
+    paths: ['moonpull/**', '.github/workflows/moonpull-android.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: moonpull
+    env:
+      KEYSTORE_B64: ${{ secrets.MOONPULL_KEYSTORE_BASE64 }}
+      MOONPULL_KEYSTORE_PASSWORD: ${{ secrets.MOONPULL_KEYSTORE_PASSWORD }}
+      MOONPULL_KEY_ALIAS: ${{ secrets.MOONPULL_KEY_ALIAS }}
+      MOONPULL_KEY_PASSWORD: ${{ secrets.MOONPULL_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: moonpull/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - name: Check every level can be finished
+        run: npm run bot
+      - run: npm run build
+      - run: npx cap sync android
+      - name: Prepare signing key (only when the secrets are set)
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/moonpull.jks"
+            echo "MOONPULL_KEYSTORE_FILE=$RUNNER_TEMP/moonpull.jks" >> "$GITHUB_ENV"
+          else
+            echo "No signing secrets: the release bundle will be unsigned."
+          fi
+      - name: Build debug APK and release bundle
+        working-directory: moonpull/android
+        run: ./gradlew --no-daemon assembleDebug bundleRelease
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moonpull-debug-apk
+          path: moonpull/android/app/build/outputs/apk/debug/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moonpull-release-aab
+          path: moonpull/android/app/build/outputs/bundle/release/app-release.aab

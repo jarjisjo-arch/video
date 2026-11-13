@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#161d36">
+<title>Moonpull</title>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud" hidden>
+  <div class="hud-l"><span id="hp"></span><span class="chip"><i class="fly"></i><b id="hf">0</b></span></div>
+  <div class="hud-c"><div id="prog"><i id="progfill"></i><i id="progboat"></i></div><span id="dist"></span></div>
+  <button id="pause" aria-label="Pause"><i></i><i></i></button>
+  <button id="power" hidden aria-label="Moon power"><svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="26" class="ring-bg"/><circle cx="30" cy="30" r="26" class="ring" id="pring"/></svg><span id="plabel"></span></button>
+</div>
+<div id="hint" hidden></div>
+<div id="storybar" hidden><p id="storytext"></p><div><span id="storydots"></span><button data-a="skipstory">Skip</button></div></div>
+<div id="photobar" hidden><button data-a="photoshare">Share</button><button data-a="photoback">Back</button></div>
+<div id="ui"></div>
+<div id="toast"></div>
+<div id="rotate"><div><b>Turn your phone sideways</b><span>Moonpull is played in landscape.</span></div></div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
