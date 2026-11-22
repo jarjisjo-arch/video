@@ -1,0 +1,27 @@
+// Hand-drawn icon set (inline SVG, currentColor where it makes sense)
+const s = (body: string, vb = '0 0 24 24') => `<svg viewBox="${vb}" aria-hidden="true">${body}</svg>`;
+export const I = {
+  fly: s('<circle cx="12" cy="12" r="10" fill="#ffd25a" opacity=".25"/><circle cx="12" cy="12" r="6" fill="#ffe27a" opacity=".55"/><circle cx="12" cy="12" r="3.4" fill="#fffbe6"/>'),
+  star: s('<path d="M12 2.2l2.9 6.2 6.8.7-5.1 4.6 1.5 6.7L12 17l-6.1 3.4 1.5-6.7L2.3 9.1l6.8-.7z" fill="currentColor"/>'),
+  lantern: s('<path d="M9 3h6M12 3v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="7" y="5" width="10" height="14" rx="3" fill="currentColor"/><rect x="9.5" y="8" width="5" height="8" rx="2" fill="#fff6d8" opacity=".9"/><path d="M9 21h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'),
+  pause: s('<rect x="6.5" y="5" width="4" height="14" rx="1.5" fill="currentColor"/><rect x="13.5" y="5" width="4" height="14" rx="1.5" fill="currentColor"/>'),
+  play: s('<path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.4-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z" fill="currentColor"/>'),
+  map: s('<path d="M3 6.5l5.5-2.5 7 2.5L21 4v13.5L15.5 20l-7-2.5L3 20z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8.5 4v13.5M15.5 6.5V20" stroke="currentColor" stroke-width="2"/>'),
+  boat: s('<path d="M3 14h18l-3 5H6z" fill="currentColor"/><path d="M12 3v11M12 4l6 9h-6z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>'),
+  house: s('<path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z" fill="currentColor"/>'),
+  scroll: s('<path d="M7 3h10a3 3 0 0 1 3 3v1h-4v11a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-1h4V6a3 3 0 0 1 0 0z" fill="currentColor"/><path d="M9 8h5M9 11.5h5M9 15h3" stroke="#1d2758" stroke-width="1.8" stroke-linecap="round"/>'),
+  gear: s('<path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>'),
+  letter: s('<rect x="3" y="5" width="18" height="14" rx="2.5" fill="currentColor"/><path d="M4 7l8 6 8-6" fill="none" stroke="#1d2758" stroke-width="1.8" stroke-linejoin="round"/>'),
+  waves: s('<path d="M2 9c2.5 0 2.5-2 5-2s2.5 2 5 2 2.5-2 5-2 2.5 2 5 2M2 15c2.5 0 2.5-2 5-2s2.5 2 5 2 2.5-2 5-2 2.5 2 5 2" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/>'),
+  lock: s('<rect x="5" y="10.5" width="14" height="10" rx="2.5" fill="currentColor"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" fill="none" stroke="currentColor" stroke-width="2.4"/>'),
+  back: s('<path d="M14.5 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>'),
+  close: s('<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>'),
+  jar: s('<path d="M8 3h8v2.5c2.5 1.5 3.5 3.7 3.5 6.5v6a3 3 0 0 1-3 3h-9a3 3 0 0 1-3-3v-6c0-2.8 1-5 3.5-6.5z" fill="currentColor"/><path d="M9.5 13l1.6 1.8 3.4-3.6" fill="none" stroke="#1d2758" stroke-width="1.8" stroke-linecap="round"/>'),
+  gift: s('<rect x="3.5" y="9" width="17" height="11.5" rx="2" fill="currentColor"/><rect x="2.5" y="6.5" width="19" height="4" rx="1.5" fill="currentColor"/><path d="M12 6.5v14" stroke="#1d2758" stroke-width="2"/><path d="M12 6.5C10 3 6.5 3.5 7.5 5.5S12 6.5 12 6.5zM12 6.5c2-3.5 5.5-3 4.5-1S12 6.5 12 6.5z" fill="none" stroke="currentColor" stroke-width="1.8"/>'),
+  moon: s('<path d="M15.5 3.5a8.5 8.5 0 1 0 5 13.5 7 7 0 0 1-5-13.5z" fill="currentColor"/>'),
+  storm: s('<path d="M7 15a4.5 4.5 0 0 1 .5-9 6 6 0 0 1 11 2.5A3.5 3.5 0 0 1 18 15z" fill="currentColor"/><path d="M12 15l-2 4h3l-1.5 3.5" fill="none" stroke="#ffd25a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'),
+  flag: s('<path d="M6 21V3.5M6 4h11l-2.5 3.5L17 11H6" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>'),
+  share: s('<circle cx="18" cy="5.5" r="2.8" fill="currentColor"/><circle cx="6" cy="12" r="2.8" fill="currentColor"/><circle cx="18" cy="18.5" r="2.8" fill="currentColor"/><path d="M8.5 10.7l7-3.9M8.5 13.3l7 3.9" stroke="currentColor" stroke-width="2"/>'),
+  retry: s('<path d="M19 12a7 7 0 1 1-2.1-5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><path d="M17.5 2.5v5h-5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>'),
+  camera: s('<path d="M4 7.5h3l1.5-2.5h7L17 7.5h3a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 20 19.5H4A1.5 1.5 0 0 1 2.5 18V9A1.5 1.5 0 0 1 4 7.5z" fill="currentColor"/><circle cx="12" cy="13" r="3.6" fill="#1d2758"/>'),
+};

@@ -1,6 +1,49 @@
-import { Ink, inkById } from './palettes';
-import { drawBoat, drawMoon, View } from './render';
+import { Ink, inkById } from './gfx/oldInks';
 import { VH } from './sim/types';
+
+export interface View { w: number; h: number; scale: number; vw: number }
+function drawBoat(g: CanvasRenderingContext2D, kind: string, x: number, y: number, ang: number, ink: Ink, lantern: string, alpha = 1, t = 0) {
+  g.save(); g.translate(x, y + 2); g.rotate(ang); g.globalAlpha = alpha;
+  const flick = 0.85 + 0.15 * Math.sin(t * 9) * Math.sin(t * 5.3);
+  // lantern
+  g.strokeStyle = ink.rock; g.lineWidth = 1.6; g.beginPath(); g.moveTo(0, -4); g.lineTo(0, -24); g.stroke();
+  g.fillStyle = lantern; g.globalAlpha = alpha * 0.16 * flick; g.beginPath(); g.arc(0, -27, 15, 0, 7); g.fill();
+  g.globalAlpha = alpha * 0.3 * flick; g.beginPath(); g.arc(0, -27, 9, 0, 7); g.fill();
+  g.globalAlpha = alpha; g.beginPath(); g.roundRect(-3.5, -32, 7, 10, 2); g.fill();
+  g.fillStyle = ink.paper;
+  if (kind === 'raft') {
+    g.fillStyle = ink.sand; g.beginPath(); g.roundRect(-20, -5, 40, 5, 2); g.fill();
+    g.fillStyle = ink.paper; g.beginPath(); g.roundRect(-18, 0, 36, 5, 2); g.fill();
+    g.strokeStyle = ink.rock; g.lineWidth = 1; g.beginPath(); for (const px of [-10, 0, 10]) { g.moveTo(px, -5); g.lineTo(px, 5); } g.stroke();
+  } else if (kind === 'skiff') {
+    g.beginPath(); g.moveTo(-20, -4); g.lineTo(24, -5); g.lineTo(13, 5); g.lineTo(-14, 5); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(-2, -5); g.lineTo(-2, -22); g.lineTo(-16, -5); g.closePath(); g.fill();
+    g.fillStyle = lantern; g.beginPath(); g.moveTo(-20, -4); g.lineTo(-10, -4); g.lineTo(-14, 5); g.closePath(); g.fill();
+  } else {
+    g.beginPath(); g.moveTo(-19, -5); g.lineTo(19, -5); g.lineTo(11, 6); g.lineTo(-11, 6); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(-9, -5); g.lineTo(0, -17); g.lineTo(9, -5); g.closePath(); g.fill();
+    g.fillStyle = 'rgba(0,0,0,.14)'; g.beginPath(); g.moveTo(0, -17); g.lineTo(9, -5); g.lineTo(0, -5); g.closePath(); g.fill();
+  }
+  g.restore();
+}
+
+function drawMoon(g: CanvasRenderingContext2D, x: number, y: number, r: number, ink: Ink, dim = false, phase = 1) {
+  g.fillStyle = ink.moon;
+  g.globalAlpha = dim ? 0.05 : 0.1; g.beginPath(); g.arc(x, y, r * 1.9, 0, 7); g.fill();
+  g.globalAlpha = dim ? 0.08 : 0.16; g.beginPath(); g.arc(x, y, r * 1.45, 0, 7); g.fill();
+  g.globalAlpha = dim ? 0.45 : 1; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  g.fillStyle = ink.sky; g.globalAlpha = dim ? 0.1 : 0.16;
+  g.beginPath(); g.arc(x - r * 0.33, y - r * 0.25, r * 0.17, 0, 7); g.fill();
+  g.beginPath(); g.arc(x + r * 0.3, y + r * 0.34, r * 0.25, 0, 7); g.fill();
+  g.beginPath(); g.arc(x + r * 0.2, y - r * 0.45, r * 0.1, 0, 7); g.fill();
+  if (phase < 0.99) { // waning: shade one limb
+    g.globalAlpha = 0.5; g.beginPath(); g.arc(x, y, r, -Math.PI / 2, Math.PI / 2); const k = (phase - 0.5) * 2;
+    g.ellipse(x, y, Math.abs(k) * r, r, 0, Math.PI / 2, -Math.PI / 2, k > 0); g.fill();
+  }
+  g.globalAlpha = 1;
+}
+
+
 
 type G = CanvasRenderingContext2D;
 interface Panel { ink: string; text: string; draw: (g: G, vw: number, t: number, ink: Ink) => void }

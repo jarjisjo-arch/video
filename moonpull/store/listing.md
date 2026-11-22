@@ -3,31 +3,34 @@
 **App name (30 max):** Moonpull
 
 **Short description (80 max):**
-You are the moon. Move the sea and carry a paper lantern home.
+Hold to pull the sea, let go to fly. Guide a paper lantern home.
 
 **Full description (4000 max):**
 
 You don't steer the boat. You are the moon.
 
-Drag the moon across the sky and the sea swells beneath it. A small paper boat with a lantern goes wherever the water sends it. Put the moon behind the boat to push it forward. Pull the moon low and the tide lifts the boat over a reef. Push it away and the sea goes flat, just in time to slip under a low rock.
+Hold anywhere and the moon pulls the sea down. The little paper boat digs into the water and races downhill. Let go before the crest and the sea throws it into the night sky. Land with the slope for a perfect landing, chain them together, and the whole sea turns gold.
 
 A storm scattered a village's fishing boats, and one child's father did not come home. The child folded a paper boat, lit a lantern and set it on the water to show him the way. A paper boat cannot cross a sea alone. But the moon was watching.
 
-WHAT YOU DO
-• One thumb. Drag anywhere to move the moon.
-• Surf your own wave to build a streak, and skim past rocks for a bonus.
-• Gather fireflies, earn up to three stars on every night.
+ONE TOUCH, REAL SKILL
+• Hold to pull the sea, let go to fly
+• Perfect landings, chains and near misses build your score
+• Fly over reefs, slip under stone arches, ride a whale into the sky
+• Outrun the storm that follows every night
 
-WHAT IS INSIDE
-• 30 nights across three coasts, each with its own hazards and colours
-• Reefs, overhangs, sandbars, whirlpools, riptides and cloud banks
-• A short story, told one line of a letter at a time
+A JOURNEY HOME
+• 24 hand-built nights across three coasts
+• A short story told one line of a letter at a time
+• Rebuild the dark village one light at a time
+• Bring the lost fishing boats home
+
+KEEP SAILING
 • Daily Tide: a new coast every day
-• Endless Night: see how far the lantern gets
-• Drift: no rocks, nothing to lose, just the sea and the music
-• Boats that handle differently, moon powers, upgrades, new inks and lantern colours
+• Endless Night: how far can you go?
+• Drift: no rocks, no storm, just the sea and the music
+• Boats that handle differently, lantern colours, star jars and daily gifts
 • Music that follows your wave
-• A ghost of your best run to race
 
 FAIR BY DESIGN
 • Plays offline

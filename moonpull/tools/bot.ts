@@ -1,61 +1,53 @@
-// Headless check that every night can be finished, and measurement of par times.
-import { Sim, FLOW } from '../src/sim/sim';
+// Checks that every night can be finished, by a sharp player and by an average one, and writes par times.
 import { getLevel, NIGHT_COUNT, specialLevel } from '../src/sim/levels';
+import { Sim } from '../src/sim/surf';
 import { BOATS } from '../src/sim/boats';
-import { LevelDef, RunCfg, SEA } from '../src/sim/types';
+import { decide } from './brain';
+import { mulberry } from '../src/sim/rng';
 import { writeFileSync } from 'node:fs';
 
-export function botInput(sim: Sim, m: { sx: number; y: number }, dt: number) {
-  const b = sim.boat, W = sim.cfg.viewW;
-  let wantX = b.x - 62, wantY = 128; // default: push from behind
-  let best: any = null, bd = 1e9;
-  for (const o of sim.level.obs) {
-    if (o.t === 'cloud' || o.t === 'rip') continue;
-    const end = o.t === 'whirl' ? o.x + 60 : o.x + o.w, start = o.t === 'whirl' ? o.x - 60 : o.x;
-    if (end < b.x - 10) continue;
-    const d = start - b.x;
-    if (d < bd) { bd = d; best = o; }
+export function play(i: number, boat = 0, sloppy = 0, seed = 1) {
+  const lvl = getLevel(i); const r = mulberry(seed);
+  const sim = new Sim(lvl, { boat: BOATS[boat], magnet: 0, hearts: BOATS[boat].hearts });
+  let held = false, wait = 0;
+  while (sim.done === 'no' && sim.t < 200) {
+    const want = decide(sim);
+    if (sloppy) { wait -= 1 / 60; if (want !== held && wait <= 0) { held = want; wait = sloppy * (0.5 + r()); } }
+    else held = want;
+    sim.update(1 / 60, held);
+    sim.events.length = 0;
   }
-  if (best && bd < 230) {
-    if (best.t === 'over') { wantY = 30; wantX = b.x - 200; if (bd > 150) { wantY = 100; wantX = b.x - 62; } }
-    else if (best.t === 'reef') { wantY = best.top < 226 ? 176 : 160; wantX = b.x - 46; if (bd > 190) { wantX = b.x - 62; wantY = 140; } }
-    else if (best.t === 'bar') { wantY = 176; wantX = b.x - 40; }
-    else { wantY = 176; wantX = b.x - 44; }
-  }
-  // avoid clouds: if the wanted moon spot is clouded, move the moon to the other band
-  for (const o of sim.level.obs) if (o.t === 'cloud' && wantX > o.x && wantX < o.x + o.w && wantY > o.y0 && wantY < o.y1) {
-    if (o.y0 > 50) { wantY = Math.min(wantY, o.y0 - 4); } else { wantY = Math.max(wantY, o.y1 + 4); }
-  }
-  const wsx = Math.max(20, Math.min(W - 20, wantX - sim.camX));
-  const sp = 1100 * dt;
-  m.sx += Math.max(-sp, Math.min(sp, wsx - m.sx)); m.y += Math.max(-sp, Math.min(sp, wantY - m.y));
-}
-
-export function run(level: LevelDef, boat = 0, maxT = 400, gen?: any) {
-  const cfg: RunCfg = { boat: BOATS[boat], power: 'none', magnet: 0, hull: 0, streak: 0, viewW: 760, endless: gen };
-  const sim = new Sim(level, cfg);
-  const m = { sx: 150, y: 100 };
-  const dt = 1 / 60;
-  while (sim.done === 'no' && sim.t < maxT) { botInput(sim, m, dt); sim.update(dt, { moonSX: m.sx, moonY: m.y, power: false }); }
   return sim;
 }
-
-if (process.argv[1] && process.argv[1].endsWith('bot.ts')) {
-  const pars: number[] = []; let bad = 0;
+if (process.argv[1]?.endsWith('bot.ts')) {
+  const pars: number[] = []; const storms: number[][] = []; let bad = 0;
+  // storm speed = a share of a sharp player's average speed, rising through the voyage
   for (let i = 0; i < NIGHT_COUNT; i++) {
-    const res = [0, 1, 2].map(bi => run(getLevel(i), bi));
-    const s = res[0];
-    for (const r of s.level.obs) if (r.t === 'rip') for (const o of s.level.obs) if ((o.t === 'over' || o.t === 'whirl') && o.x + o.w > r.x - 40 && o.x < r.x + r.w + 60) { console.log('  CONFLICT rip vs', o.t, 'at', o.x); bad++; }
-    const ok = res.every(r => r.done === 'win');
+    // tuned to the slowest of the starting boats, so every boat can make it
+    let avg = Infinity;
+    for (const bi of [0, 1, 2]) { const lvl = getLevel(i); const sim = new Sim(lvl, { boat: BOATS[bi], magnet: 0, hearts: 99, noStorm: true });
+      while (sim.done === 'no' && sim.t < 200) { sim.update(1 / 60, decide(sim)); sim.events.length = 0; }
+      avg = Math.min(avg, lvl.length / sim.t); }
+    const r = 0.58 + 0.22 * (i / (NIGHT_COUNT - 1));
+    storms.push([Math.round(avg * r * 0.85), Math.round(avg * r * 1.12)]);
+  }
+  if (process.argv.includes('--storms')) { writeFileSync(new URL('../src/sim/pars.ts', import.meta.url), `export const PARS: number[] = [];\nexport const STORMS: number[][] = ${JSON.stringify(storms)};\n`); console.log('storms written, run again with --write'); process.exit(0); }
+  for (let i = 0; i < NIGHT_COUNT; i++) {
+    const s = play(i), s2 = play(i, 1), s3 = play(i, 2);
+    const avg = [1, 2, 3, 4, 5, 6].map(k => play(i, 0, 0.12, k)); const avgWins = avg.filter(a => a.done === 'win').length;
+    const ok = s.done === 'win' && s2.done === 'win' && s3.done === 'win';
     if (!ok) bad++;
-    pars.push(Math.round(s.t * 1.12));
-    console.log(`night ${String(i + 1).padStart(2)} len ${Math.round(s.level.length)} ${res.map(r => `${r.done}@${r.t.toFixed(0)}s hits${r.hits}`).join(' | ')} flies ${s.fliesGot}/${s.fliesTotal} near ${s.nearCount} peak x${s.multPeak.toFixed(1)}`);
+    pars.push(Math.ceil(s.t * 1.15));
+    console.log(`night ${String(i + 1).padStart(2)} ${s.done}@${s.t.toFixed(0)}s crash${s.crashes} gap${Math.round(s.stormGap)} | reed ${s2.done} swift ${s3.done} | sloppy wins ${avgWins}/6 crash~${(avg.reduce((a, b) => a + b.crashes, 0) / 6).toFixed(1)} storm-loss ${avg.filter(a => a.why === 'storm').length} | flies ${s.fliesGot}/${s.fliesTotal} perf ${s.perfects} near ${s.nears} rings ${s.rings} chain ${s.bestChain}`);
   }
   for (const seed of [1, 2, 3]) {
-    const d = specialLevel('daily', seed); const r = run(d.level);
-    const e = specialLevel('endless', seed); const re = run(e.level, 0, 300, e.gen);
-    console.log(`daily ${seed}: ${r.done}@${r.t.toFixed(0)}s hits${r.hits} | endless ${seed}: ${re.done} x=${Math.round(re.boat.x)} t=${re.t.toFixed(0)} hits${re.hits}`);
+    const d = specialLevel('daily', seed); const sd = new Sim(d.lvl, { boat: BOATS[0], magnet: 0, hearts: 3 });
+    while (sd.done === 'no' && sd.t < 200) { sd.update(1 / 60, decide(sd)); sd.events.length = 0; }
+    const e = specialLevel('endless', seed); const se = new Sim(e.lvl, { boat: BOATS[0], magnet: 0, hearts: 3, endless: e.gen });
+    while (se.done === 'no' && se.t < 240) { se.update(1 / 60, decide(se)); se.events.length = 0; }
+    console.log(`daily ${seed}: ${sd.done}@${sd.t.toFixed(0)}s crash${sd.crashes} | endless ${seed}: ${se.done} ${se.why} x=${Math.round(se.b.x)} t=${se.t.toFixed(0)}`);
   }
-  if (process.argv.includes('--write')) { writeFileSync(new URL('../src/sim/pars.ts', import.meta.url), `// generated by tools/bot.ts --write\nexport const PARS: number[] = ${JSON.stringify(pars)};\n`); console.log('pars written'); }
-  console.log(bad ? `${bad} nights NOT finishable by the bot` : 'all nights finishable');
+  if (process.argv.includes('--write')) writeFileSync(new URL('../src/sim/pars.ts', import.meta.url), `// generated by tools/bot.ts --write\nexport const PARS: number[] = ${JSON.stringify(pars)};\nexport const STORMS: number[][] = ${JSON.stringify(storms)};\n`);
+  console.log(bad ? `${bad} nights NOT finishable` : 'all nights finishable');
+  if (bad) process.exitCode = 1;
 }

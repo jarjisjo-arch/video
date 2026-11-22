@@ -42,7 +42,7 @@ Run the workflow again. `moonpull-release-aab` now contains a signed `app-releas
 
 ## 4. Updates
 
-For each new upload raise `versionCode` by one (and `versionName` as you like) in `android/app/build.gradle`.
+For each new upload raise `versionCode` by one (it is 2 now) (and `versionName` as you like) in `android/app/build.gradle`.
 
 ## Not included yet
 

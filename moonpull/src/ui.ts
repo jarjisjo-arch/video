@@ -1,216 +1,240 @@
 import { Game, Result, Mode } from './game';
 import { COASTS, NIGHT_COUNT, getLevel } from './sim/levels';
 import { BOATS } from './sim/boats';
-import { INKS, LANTERNS } from './palettes';
-import { save, persist, starCount, totalStars, nightUnlocked, modeUnlocked, COAST_NEED, rankProgress, rankOf, hasBoat, hasPower, UPGRADES, buyUpgrade, buyInk, buyLantern, missionText, claimMission, dailyAvailable, claimDaily, DAILY_GIFT, resetAll, today, RANKS } from './state';
+import { I } from './icons';
+import {
+  save, persist, starCount, totalStars, nightUnlocked, modeUnlocked, COAST_NEED, rankProgress, rankOf, UPGRADES, buyUpgrade, buyBoat, missionText, claimMission,
+  dailyAvailable, claimDaily, DAILY_GIFT, resetAll, today, VILLAGE, buildItem, nextBuild, LANTERNS, JAR, openJar, completed,
+} from './state';
 import { sfx, initAudio, applyVolumes, suspendAudio } from './audio';
 import { shareCanvas, onBack, onPause, onResume, exitApp, buzz } from './platform';
-import { Sim } from './sim/sim';
+import { Sim } from './sim/surf';
 
 const $ = (id: string) => document.getElementById(id)!;
 const ui = $('ui');
 let game: Game;
-let screen = 'title', arg: any = null, lastResult: Result | null = null, harbourTab = 'boats';
+let screen = 'home', arg: any = null, lastResult: Result | null = null, tab = 'boats', mapCoast = -1;
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
-const stars = (m: number, cls = '') => [1, 2, 4].map(b => `<i class="star ${cls} ${m & b ? 'on' : ''}"></i>`).join('');
-const POWERS = [
-  { id: 'spring', name: 'Spring Tide', blurb: 'One huge swell under the moon, on demand.', rank: 2 },
-  { id: 'still', name: 'Still Water', blurb: 'The sea goes flat for a moment.', rank: 5 },
-];
+const ic = (k: keyof typeof I, cls = '') => `<span class="ic ${cls}">${I[k]}</span>`;
+const num = (n: number) => n.toLocaleString('en-US');
 
 let toastT = 0;
-export function toast(s: string) { const t = $('toast'); t.textContent = s; t.classList.add('on'); clearTimeout(toastT); toastT = window.setTimeout(() => t.classList.remove('on'), 2400); }
-
+export function toast(s: string) { const t = $('toast'); t.textContent = s; t.classList.add('on'); clearTimeout(toastT); toastT = window.setTimeout(() => t.classList.remove('on'), 2200); }
 function nextNight() { let i = 0; while (i < NIGHT_COUNT - 1 && (save.stars[i] & 1) && nightUnlocked(i + 1)) i++; return i; }
-function missionBadge() { const n = save.missions.filter(m => m.done).length + (dailyAvailable() ? 1 : 0); return n ? `<span class="badge">${n}</span>` : ''; }
-const head = (title: string, back = 'title') => `<header><button class="back" data-a="go:${back}" aria-label="Back">&larr;</button><h2>${title}</h2><span class="chip"><i class="fly"></i>${save.flies}</span></header>`;
+const head = (title: string, back = 'home') => `<header><button class="round" data-a="go:${back}" aria-label="Back">${I.back}</button><h2>${title}</h2><span class="chip"><span class="ic">${I.fly}</span>${num(save.flies)}</span></header>`;
+const modal = (inner: string, narrow = false) => `<div class="modal"><div class="panel ${narrow ? 'narrow' : ''}">${inner}</div></div>`;
+const taskBadge = () => { const n = save.missions.filter(m => m.done).length + (dailyAvailable() ? 1 : 0) + (save.jar >= JAR ? 1 : 0); return n ? `<span class="badge">${n}</span>` : ''; };
 
+const POWERS_NOTE = '';
 const screens: Record<string, (a: any) => string> = {
-  title: () => {
-    const n = nextNight(); const done = save.stars.every(s => s & 1);
-    return `<div class="screen title"><div class="brand"><h1>Moonpull</h1><p class="tag">You are the moon. Move the sea.</p>
-      <div class="chips"><span class="chip"><i class="fly"></i>${save.flies}</span><span class="chip">${totalStars()} / ${NIGHT_COUNT * 3} stars</span><span class="chip">Voyage rank ${rankOf()}</span></div></div>
-      <div class="menu">
-        <button class="btn pri" data-a="pre:${n}">${done ? 'Sail again' : save.stats.nights ? 'Continue' : 'Set sail'} &middot; Night ${n + 1}</button>
-        <button class="btn" data-a="go:map">Voyage map</button>
-        <button class="btn" data-a="go:modes">Other waters</button>
-        <button class="btn" data-a="go:harbour">Harbour</button>
-        <div class="row"><button class="btn sm" data-a="go:missions">Tasks ${missionBadge()}</button><button class="btn sm" data-a="go:letter">Letter</button><button class="btn sm" data-a="go:settings">Settings</button></div>
-      </div></div>`;
+  home: () => {
+    const n = nextNight(), rp = rankProgress(), nb = nextBuild(), done = completed() === NIGHT_COUNT;
+    const tile = (a: string, icon: keyof typeof I, label: string, extra = '', locked = false) => `<button class="tile ${locked ? 'lockd' : ''}" data-a="${a}"><span class="round">${I[icon]}</span>${label}${extra}</button>`;
+    return `<div class="home">
+      <div class="logo"><h1>Moonpull</h1><p>You are the moon. Move the sea.</p></div>
+      <div class="topr"><span class="chip"><span class="ic">${I.fly}</span>${num(save.flies)}</span><span class="chip star"><span class="ic">${I.star}</span>${totalStars()}</span>
+        <span class="rank" title="Voyage rank"><i>${rp.rank}</i><span class="bar"><i style="width:${Math.round(rp.frac * 100)}%"></i></span></span></div>
+      ${nb ? `<button class="build" data-a="go:village">${ic('house')}<span>Rebuild the village: <b>${nb.name}</b></span><span class="chip"><span class="ic">${I.fly}</span>${nb.cost}</span></button>` : ''}
+      <div class="dock">
+        ${tile('go:map', 'map', 'Voyage')}${tile('go:modes', 'waves', 'Waters', '', !modeUnlocked('daily'))}${tile('go:harbour', 'boat', 'Harbour')}
+        ${tile('go:village', 'house', 'Village')}${tile('go:tasks', 'scroll', 'Tasks', taskBadge())}${tile('go:letter', 'letter', 'Letter')}${tile('go:settings', 'gear', 'Settings')}
+      </div>
+      <div class="playbox"><button class="btn ember big" data-a="pre:${n}">${ic('play')}${done ? 'Sail again' : 'Play'}</button><span class="sub">Night ${n + 1} · ${COASTS[Math.floor(n / 8)].name}</span></div>
+    </div>`;
   },
   map: () => {
-    const ts = totalStars(), nx = nextNight();
-    return `<div class="screen"><div class="panel">${head('Voyage map')}<div class="body">${COASTS.map((c, ci) => {
-      const open = ts >= COAST_NEED[ci] && (ci === 0 || (save.stars[ci * 10 - 1] & 1));
-      const got = save.stars.slice(ci * 10, ci * 10 + 10).reduce((a, m) => a + starCount(m), 0);
-      const why = ci > 0 && !open ? (!(save.stars[ci * 10 - 1] & 1) ? `Finish Night ${ci * 10} first` : `Needs ${COAST_NEED[ci]} stars. You have ${ts}.`) : '';
-      return `<div class="coast"><h3>${c.name}<small>${c.sub} &middot; ${got}/30 stars</small></h3>${why ? `<span class="lockmsg">${why}</span>` : ''}
-        <div class="nights">${Array.from({ length: 10 }, (_, k) => { const i = ci * 10 + k, u = nightUnlocked(i);
-          return `<button class="night ${u ? '' : 'locked'} ${i === nx && u ? 'next' : ''}" ${u ? `data-a="pre:${i}"` : 'disabled'} aria-label="Night ${i + 1}">${i + 1}<span class="st">${stars(save.stars[i], 'sm')}</span></button>`; }).join('')}</div></div>`;
-    }).join('')}</div></div></div>`;
+    const nx = nextNight(); if (mapCoast < 0) mapCoast = Math.floor(nx / 8);
+    const ci = mapCoast, ts = totalStars();
+    const open = ts >= COAST_NEED[ci] && (ci === 0 || (save.stars[ci * 8 - 1] & 1));
+    const why = !open ? (!(save.stars[ci * 8 - 1] & 1) ? `Finish Night ${ci * 8} to sail here.` : `Needs ${COAST_NEED[ci]} stars. You have ${ts}.`) : '';
+    const W = 640, xs = Array.from({ length: 8 }, (_, k) => 50 + k * (W - 100) / 7), ys = xs.map((_, k) => 96 + Math.sin(k * 1.1 + ci) * 46);
+    const path = xs.map((x, k) => `${k ? 'L' : 'M'}${x},${ys[k]}`).join(' ');
+    const got = save.stars.slice(ci * 8, ci * 8 + 8).reduce((a, m) => a + starCount(m), 0);
+    return modal(`${head('Voyage')}<div class="body">
+      <div class="tabs">${COASTS.map((c, k) => `<button class="tab ${k === ci ? 'on' : ''}" data-a="coast:${k}">${c.name}</button>`).join('')}</div>
+      <span class="muted">${COASTS[ci].sub} · ${got} of 24 stars${why ? ` · <span style="color:#ffb3a8">${why}</span>` : ''}</span>
+      <div class="scrollx"><div class="route"><svg class="path" viewBox="0 0 ${W} 200" preserveAspectRatio="none"><path d="${path}" fill="none" stroke="rgba(255,230,170,.35)" stroke-width="3" stroke-dasharray="2 10" stroke-linecap="round"/></svg>
+        ${xs.map((x, k) => { const i = ci * 8 + k, u = nightUnlocked(i), m = save.stars[i];
+          return `<button class="node ${!u ? 'locked' : m & 1 ? 'done' : ''} ${i === nx && u ? 'next' : ''}" style="left:${(x / W) * 100}%;top:${ys[k]}px" ${u ? `data-a="pre:${i}"` : 'disabled'} aria-label="Night ${i + 1}">${u ? i + 1 : I.lock}${u ? `<span class="st">${[1, 2, 4].map(b => `<span class="ic ${m & b ? 'on' : ''}">${I.star}</span>`).join('')}</span>` : ''}</button>`; }).join('')}
+      </div></div></div>`);
   },
   pre: (i: number) => {
-    const L = getLevel(i), m = save.stars[i]; const boat = BOATS.find(b => b.id === save.boat)!; const pw = POWERS.find(p => p.id === save.power);
-    return `<div class="screen"><div class="panel narrow">${head(`Night ${i + 1} &middot; ${COASTS[L.coast].name}`, 'map')}<div class="body">
-      <p class="hand">&ldquo;${L.line}&rdquo;</p>
-      <div class="goals"><div><i class="star ${m & 1 ? 'on' : ''}"></i>Reach the harbour</div><div><i class="star ${m & 2 ? 'on' : ''}"></i>Gather 4 in 5 fireflies (${L.flies.length} tonight)</div><div><i class="star ${m & 4 ? 'on' : ''}"></i>Arrive within ${fmt(L.par)}${save.bestTime[i] ? ` &middot; your best ${fmt(save.bestTime[i])}` : ''}</div></div>
-      <p class="muted">${boat.name}${pw ? ' &middot; ' + pw.name : ''}${L.pull < 1 ? ' &middot; waning moon, weaker pull' : ''}</p>
-      </div><footer><button class="btn" data-a="go:harbour">Change boat</button><button class="btn pri" data-a="play:${i}">Set sail</button></footer></div></div>`;
+    const L = getLevel(i), m = save.stars[i], boat = BOATS.find(b => b.id === save.boat)!;
+    const st = (b: number) => `<span class="ic ${m & b ? 'on' : ''}">${I.star}</span>`;
+    return modal(`${head(`Night ${i + 1}`, 'map')}<div class="body">
+      <p class="quote">“${L.line}”</p>
+      <div class="goals"><div>${st(1)}Reach the harbour before the storm</div><div>${st(2)}Gather ${Math.ceil(L.flies.length * 0.7)} of ${L.flies.length} fireflies</div><div>${st(4)}Arrive within ${fmt(L.par)}${save.bestTime[i] ? ` <span class="muted">· best ${fmt(save.bestTime[i])}</span>` : ''}</div></div>
+      <span class="muted">${COASTS[L.coast].name} · ${boat.name}</span>
+      </div><footer><button class="btn glass" data-a="go:harbour">${ic('boat')}Boat</button><button class="btn ember big" data-a="play:${i}">${ic('play')}Set sail</button></footer>`, true);
   },
   modes: () => {
     const card = (id: string, name: string, blurb: string, need: string, extra: string) => { const u = modeUnlocked(id);
-      return `<div class="item"><div class="t"><b>${name}</b><span class="muted">${u ? blurb : need}</span>${u && extra ? `<span class="muted">${extra}</span>` : ''}</div><button class="btn ${u ? 'pri' : ''} sm" ${u ? `data-a="mode:${id}"` : 'disabled'}>${u ? 'Sail' : 'Locked'}</button></div>`; };
-    return `<div class="screen"><div class="panel narrow">${head('Other waters')}<div class="body">
-      ${card('daily', 'Daily Tide', 'One new coast every day. 50 extra fireflies the first time you finish it.', 'Finish Night 3 to open', save.dailyBest.date === today() ? `Today's best: ${save.dailyBest.score}` : 'Not sailed today')}
-      ${card('endless', 'Endless Night', 'No harbour. See how far the lantern gets.', 'Finish Night 10 to open', save.endlessBest ? `Best score: ${save.endlessBest}` : '')}
-      ${card('drift', 'Drift', 'No rocks, nothing to lose. Just the sea, the moon and the music.', 'Finish Night 5 to open', '')}
-    </div></div></div>`;
+      return `<div class="card"><div class="pic">${I[id === 'daily' ? 'gift' : id === 'endless' ? 'moon' : 'waves']}</div><div class="t"><b>${name}</b><span class="muted">${u ? blurb : need}</span>${u && extra ? `<span class="muted">${extra}</span>` : ''}</div><button class="btn ${u ? 'ember' : 'glass'} sm" ${u ? `data-a="mode:${id}"` : 'disabled'}>${u ? 'Sail' : ic('lock')}</button></div>`; };
+    return modal(`${head('Other waters')}<div class="body">
+      ${card('daily', 'Daily Tide', 'A new coast every day. 60 bonus fireflies the first time you finish it.', 'Finish Night 3 to open.', save.dailyBest.date === today() ? `Today's best: ${num(save.dailyBest.score)}` : 'Not sailed today')}
+      ${card('endless', 'Endless Night', 'No harbour. The storm never stops. How far can you go?', 'Finish Night 8 to open.', save.endlessBest ? `Best: ${num(save.endlessBest)}` : '')}
+      ${card('drift', 'Drift', 'No rocks, no storm. Just the sea, the moon and the music.', 'Finish Night 4 to open.', '')}
+    </div>`, true);
   },
   harbour: () => {
-    const tabs = [['boats', 'Boats'], ['powers', 'Moon powers'], ['upgrades', 'Upgrades'], ['inks', 'Inks'], ['lanterns', 'Lanterns']];
+    const tabs = [['boats', 'Boats'], ['lanterns', 'Lanterns'], ['upgrades', 'Upgrades']];
     let body = '';
-    if (harbourTab === 'boats') body = BOATS.map(b => { const u = hasBoat(b.id), sel = save.boat === b.id;
-      return `<div class="item ${sel ? 'sel' : ''}"><div class="t"><b>${b.name}</b><span class="muted">${b.blurb}</span><span class="muted">Speed ${'●'.repeat(Math.round((b.accel - 0.5) * 6))} &middot; Knocks ${b.hp + save.up.hull}</span></div>${u ? `<button class="btn sm" ${sel ? 'disabled' : `data-a="boat:${b.id}"`}>${sel ? 'Sailing' : 'Choose'}</button>` : `<span class="muted">Voyage rank ${b.rank}</span>`}</div>`; }).join('');
-    if (harbourTab === 'powers') body = `<p class="muted">One power comes with you each night. Tap the moon button to use it, then wait for it to return.</p>` + POWERS.map(p => { const u = hasPower(p.id), sel = save.power === p.id;
-      return `<div class="item ${sel ? 'sel' : ''}"><div class="t"><b>${p.name}</b><span class="muted">${p.blurb}</span></div>${u ? `<button class="btn sm" ${sel ? 'disabled' : `data-a="power:${p.id}"`}>${sel ? 'Equipped' : 'Equip'}</button>` : `<span class="muted">Voyage rank ${p.rank}</span>`}</div>`; }).join('');
-    if (harbourTab === 'upgrades') body = UPGRADES.map(u => { const lv = save.up[u.id], c = u.cost[lv];
-      return `<div class="item"><div class="t"><b>${u.name}</b><span class="muted">${u.blurb}</span><span class="pips">${u.cost.map((_, k) => `<i class="${k < lv ? 'on' : ''}"></i>`).join('')}</span></div>${c !== undefined ? `<button class="btn sm ${save.flies >= c ? 'pri' : ''}" ${save.flies >= c ? `data-a="up:${u.id}"` : 'disabled'}><i class="fly"></i>${c}</button>` : '<span class="muted">Complete</span>'}</div>`; }).join('');
-    if (harbourTab === 'inks') body = `<div class="item ${save.ink === 'auto' ? 'sel' : ''}"><div class="t"><b>Follow the coast</b><span class="muted">Each coast keeps its own colours.</span></div><button class="btn sm" ${save.ink === 'auto' ? 'disabled' : 'data-a="ink:auto"'}>${save.ink === 'auto' ? 'In use' : 'Use'}</button></div>` + INKS.map(k => { const own = save.inks.includes(k.id), sel = save.ink === k.id;
-      return `<div class="item ${sel ? 'sel' : ''}"><span class="sw" style="background:linear-gradient(${k.sky} 50%,${k.sea} 50%)"></span><div class="t"><b>${k.name}</b></div>${own ? `<button class="btn sm" ${sel ? 'disabled' : `data-a="ink:${k.id}"`}>${sel ? 'In use' : 'Use'}</button>` : k.id === 'ember' ? '<span class="muted">Voyage rank 10</span>' : `<button class="btn sm ${save.flies >= k.price ? 'pri' : ''}" ${save.flies >= k.price ? `data-a="buyink:${k.id}"` : 'disabled'}><i class="fly"></i>${k.price}</button>`}</div>`; }).join('');
-    if (harbourTab === 'lanterns') body = LANTERNS.map(k => { const own = save.lanterns.includes(k.id), sel = save.lantern === k.id; const ranked = k.id === 'jade' ? 8 : k.id === 'pearl' ? 12 : 0;
-      return `<div class="item ${sel ? 'sel' : ''}"><span class="sw" style="background:${k.c}"></span><div class="t"><b>${k.name}</b></div>${own ? `<button class="btn sm" ${sel ? 'disabled' : `data-a="lantern:${k.id}"`}>${sel ? 'Lit' : 'Light'}</button>` : ranked ? `<span class="muted">Voyage rank ${ranked}</span>` : `<button class="btn sm ${save.flies >= k.price ? 'pri' : ''}" ${save.flies >= k.price ? `data-a="buylantern:${k.id}"` : 'disabled'}><i class="fly"></i>${k.price}</button>`}</div>`; }).join('');
-    return `<div class="screen"><div class="panel">${head('Harbour')}<div class="body"><div class="tabs">${tabs.map(([id, n]) => `<button class="tab ${harbourTab === id ? 'on' : ''}" data-a="tab:${id}">${n}</button>`).join('')}</div>${body}</div></div></div>`;
+    if (tab === 'boats') body = BOATS.map(b => { const own = save.boats.includes(b.id), sel = save.boat === b.id;
+      const action = own ? `<button class="btn sm ${sel ? 'glass' : 'teal'}" ${sel ? 'disabled' : `data-a="boat:${b.id}"`}>${sel ? 'Sailing' : 'Choose'}</button>`
+        : b.price ? `<button class="btn sm" ${save.flies >= b.price ? `data-a="buyboat:${b.id}"` : 'disabled'}><span class="ic">${I.fly}</span>${b.price}</button>` : `<span class="muted">Voyage rank ${b.rank}</span>`;
+      return `<div class="card ${sel ? 'sel' : ''}"><div class="pic"><canvas data-boat="${b.id}" width="112" height="88"></canvas></div><div class="t"><b>${b.name}</b><span class="muted">${b.blurb}</span><span class="muted">${b.hearts + save.up.hearts} lanterns</span></div>${action}</div>`; }).join('');
+    if (tab === 'lanterns') body = LANTERNS.map(l => { const own = save.lanterns.includes(l.id), sel = save.lantern === l.id;
+      return `<div class="card ${sel ? 'sel' : ''}"><div class="pic" style="color:${l.c}"><span class="ic" style="width:30px;height:30px;filter:drop-shadow(0 0 8px ${l.c})">${I.lantern}</span></div><div class="t"><b>${l.name}</b><span class="muted">${own ? 'Lights the water around the boat' : 'Earned from voyage ranks and star jars'}</span></div>${own ? `<button class="btn sm ${sel ? 'glass' : 'teal'}" ${sel ? 'disabled' : `data-a="lantern:${l.id}"`}>${sel ? 'Lit' : 'Light'}</button>` : ic('lock')}</div>`; }).join('');
+    if (tab === 'upgrades') body = UPGRADES.map(u => { const lv = save.up[u.id], c = u.cost[lv];
+      return `<div class="card"><div class="pic">${I[u.id === 'magnet' ? 'lantern' : 'boat']}</div><div class="t"><b>${u.name}</b><span class="muted">${u.blurb}</span><span class="pips">${u.cost.map((_, k) => `<i class="${k < lv ? 'on' : ''}"></i>`).join('')}</span></div>${c !== undefined ? `<button class="btn sm" ${save.flies >= c ? `data-a="up:${u.id}"` : 'disabled'}><span class="ic">${I.fly}</span>${c}</button>` : '<span class="muted">Complete</span>'}</div>`; }).join('');
+    return modal(`${head('Harbour')}<div class="body"><div class="tabs">${tabs.map(([id, n]) => `<button class="tab ${tab === id ? 'on' : ''}" data-a="tab:${id}">${n}</button>`).join('')}</div>${body}</div>`);
   },
-  missions: () => {
-    const rp = rankProgress(); const avail = dailyAvailable(); const day = avail ? (save.daily.streak % 7) : ((save.daily.streak - 1) % 7);
-    return `<div class="screen"><div class="panel">${head('Tasks and gifts')}<div class="body">
-      <div><b>Voyage rank ${rp.rank}</b><div class="bar"><i style="width:${Math.round(rp.frac * 100)}%"></i></div><span class="muted">${rp.next ? `Next: ${rp.next}, ${rp.toGo} leagues away` : 'Top rank reached'}</span></div>
-      <div><b>Daily gift</b><div class="week">${DAILY_GIFT.map((g, k) => `<div class="${k < day || (!avail && k === day) ? 'got' : avail && k === day ? 'now' : ''}">Day ${k + 1}<br><b>${g}</b></div>`).join('')}</div></div>
-      ${avail ? `<button class="btn pri" data-a="gift">Collect today's gift</button>` : `<span class="muted">Come back tomorrow for the next gift. Miss a day and the week starts over.</span>`}
-      <b>Tasks</b>
-      ${save.missions.map((m, i) => `<div class="item"><div class="t"><b>${missionText(m)}</b><div class="bar"><i style="width:${Math.round(m.prog / m.goal * 100)}%"></i></div><span class="muted">${m.prog} / ${m.goal}</span></div><button class="btn sm ${m.done ? 'pri' : ''}" ${m.done ? `data-a="claim:${i}"` : 'disabled'}><i class="fly"></i>${m.reward}</button></div>`).join('')}
-    </div></div></div>`;
+  village: () => {
+    const built = save.built.length;
+    return modal(`${head('The village')}<div class="body">
+      <span class="muted">The storm left the village dark. Spend fireflies to light it again. ${built} of ${VILLAGE.length} restored. Every four nights you finish, another boat comes home.</span>
+      ${VILLAGE.map(v => { const has = save.built.includes(v.id), canBuy = !has && save.flies >= v.cost, isNext = nextBuild()?.id === v.id;
+        return `<div class="card ${has ? 'sel' : ''}"><div class="pic" style="color:${has ? 'var(--gold1)' : '#56608f'}">${I.house}</div><div class="t"><b>${v.name}</b><span class="muted">${v.blurb}</span></div>${has ? '<span class="muted">Lit</span>' : `<button class="btn sm ${canBuy ? '' : 'glass'}" ${canBuy && isNext ? `data-a="build:${v.id}"` : 'disabled'}><span class="ic">${I.fly}</span>${v.cost}</button>`}</div>`; }).join('')}
+    </div>`);
+  },
+  tasks: () => {
+    const rp = rankProgress(), avail = dailyAvailable(), day = avail ? save.daily.streak % 7 : (save.daily.streak - 1) % 7;
+    return modal(`${head('Tasks and gifts')}<div class="body">
+      <div class="card"><div class="pic">${I.gift}</div><div class="t"><b>Daily gift</b><div class="week">${DAILY_GIFT.map((g, k) => `<div class="${k < day || (!avail && k === day) ? 'got' : avail && k === day ? 'now' : ''}">Day ${k + 1}<b>${g}</b></div>`).join('')}</div></div></div>
+      ${avail ? `<button class="btn ember" data-a="gift">${ic('gift')}Collect today's gift</button>` : '<span class="muted">Come back tomorrow for the next gift. Miss a day and the week starts over.</span>'}
+      <div class="card"><div class="pic">${I.jar}</div><div class="t"><b>Star jar</b><span class="muted">Every ${JAR} stars you earn fill a jar of fireflies.</span><div class="bar gold"><i style="width:${Math.min(100, save.jar / JAR * 100)}%"></i></div></div>${save.jar >= JAR ? `<button class="btn sm" data-a="jar">Open</button>` : `<span class="muted">${save.jar}/${JAR}</span>`}</div>
+      <div class="card"><div class="pic" style="color:var(--teal1)">${I.moon}</div><div class="t"><b>Voyage rank ${rp.rank}</b><div class="bar"><i style="width:${Math.round(rp.frac * 100)}%"></i></div><span class="muted">${rp.next ? `Next: ${rp.next}` : 'Top rank reached'}</span></div></div>
+      ${save.missions.map((m, i) => `<div class="card"><div class="pic">${I.scroll}</div><div class="t"><b>${missionText(m)}</b><div class="bar gold"><i style="width:${Math.round(m.prog / m.goal * 100)}%"></i></div><span class="muted">${m.prog} / ${m.goal}</span></div><button class="btn sm ${m.done ? '' : 'glass'}" ${m.done ? `data-a="claim:${i}"` : 'disabled'}><span class="ic">${I.fly}</span>${m.reward}</button></div>`).join('')}
+    </div>`);
   },
   letter: () => {
-    const done = save.stars.map(s => s & 1);
-    const n = done.filter(Boolean).length;
-    return `<div class="screen"><div class="panel narrow">${head('The letter')}<div class="body letter">
-      ${n === 0 ? '<span class="muted">The letter is folded inside the boat. Each night you finish reveals one line.</span>' : ''}
-      ${Array.from({ length: NIGHT_COUNT }, (_, i) => done[i] ? `<p class="${i % 10 === 0 && i ? 'gap' : ''}">${getLevel(i).line}</p>` : '').join('')}
+    const done = save.stars.map(s => s & 1), n = done.filter(Boolean).length;
+    return modal(`${head('The letter')}<div class="body letter">
+      ${n === 0 ? '<span class="muted">The letter is folded inside the boat. Each night you finish unfolds one more line.</span>' : ''}
+      ${Array.from({ length: NIGHT_COUNT }, (_, i) => done[i] ? `<p class="${i % 8 === 0 && i ? 'gap' : ''}">${getLevel(i).line}</p>` : '').join('')}
       ${n > 0 && n < NIGHT_COUNT ? `<span class="muted">${NIGHT_COUNT - n} lines still folded away.</span>` : ''}
-      <div class="tabs"><button class="tab" data-a="scene:intro">Replay: the storm</button>${save.seen.coast1 ? '<button class="tab" data-a="scene:coast1">Replay: the lights</button>' : ''}${save.seen.coast2 ? '<button class="tab" data-a="scene:coast2">Replay: the dark</button>' : ''}${save.seen.ending ? '<button class="tab" data-a="scene:ending">Replay: home</button>' : ''}</div>
-    </div></div></div>`;
+      <div class="tabs"><button class="tab" data-a="scene:intro">The storm</button>${save.seen.coast1 ? '<button class="tab" data-a="scene:coast1">The lights</button>' : ''}${save.seen.coast2 ? '<button class="tab" data-a="scene:coast2">The dark</button>' : ''}${save.seen.ending ? '<button class="tab" data-a="scene:ending">Home</button>' : ''}</div>
+    </div>`, true);
   },
   settings: () => {
-    const t = (k: keyof typeof save.settings, name: string, sub = '') => `<div class="toggle"><div><b>${name}</b>${sub ? `<br><span class="muted">${sub}</span>` : ''}</div><button class="sw2 ${save.settings[k] ? 'on' : ''}" data-a="set:${k}" role="switch" aria-checked="${save.settings[k]}" aria-label="${name}"></button></div>`;
-    return `<div class="screen"><div class="panel narrow">${head('Settings')}<div class="body">
-      ${t('sfx', 'Sound effects')}${t('music', 'Music')}${t('haptics', 'Vibration')}
-      ${t('left', 'Left-handed', 'Moves the moon power button to the left side.')}
-      ${t('contrast', 'High contrast', 'Outlines rocks and fireflies so they stand out in every ink.')}
-      ${t('reduced', 'Reduce motion', 'Turns off screen shake, flashes and slow motion.')}
-      <div class="toggle"><div><b>Start over</b><br><span class="muted">Erases all progress on this device.</span></div><button class="btn sm" data-a="${arg === 'confirm' ? 'reset' : 'askreset'}">${arg === 'confirm' ? 'Yes, erase everything' : 'Erase'}</button></div>
-      <span class="muted">Moonpull 1.0.0. Plays offline. Your progress is stored only on this device; the game collects no personal data.</span>
-    </div></div></div>`;
+    const t = (k: keyof typeof save.settings, name: string, sub = '') => `<div class="toggle"><div><b>${name}</b>${sub ? `<br><span class="muted">${sub}</span>` : ''}</div><button class="sw ${save.settings[k] ? 'on' : ''}" data-a="set:${k}" role="switch" aria-checked="${save.settings[k]}" aria-label="${name}"></button></div>`;
+    return modal(`${head('Settings')}<div class="body">
+      ${t('music', 'Music')}${t('sfx', 'Sound effects')}${t('haptics', 'Vibration')}
+      ${t('reduced', 'Reduce motion', 'No screen shake, flashes or slow motion.')}
+      <div class="toggle"><div><b>Start over</b><br><span class="muted">Erases all progress on this device.</span></div><button class="btn sm glass" data-a="${arg === 'confirm' ? 'reset' : 'askreset'}">${arg === 'confirm' ? 'Yes, erase it all' : 'Erase'}</button></div>
+      <span class="muted">Moonpull 2.0.0 · Plays offline · Your progress stays on this device and the game collects no personal data.</span>
+    </div>`, true);
   },
-  pause: () => `<div class="screen"><div class="panel narrow"><header><h2>Paused</h2></header><div class="body">
-      <button class="btn pri" data-a="resume">Resume</button><button class="btn" data-a="restart">Start this run again</button><button class="btn" data-a="photo">Photo mode</button><button class="btn" data-a="quit">${game.mode === 'night' ? 'Back to the map' : 'End run'}</button></div></div></div>`,
-  revive: () => `<div class="screen"><div class="panel narrow"><header><h2>The lantern went out</h2></header><div class="body"><p>Relight it once and carry on from here?</p></div>
-      <footer><button class="btn" data-a="norevive">Let it go</button><button class="btn pri" data-a="revive"><i class="fly"></i>40 &middot; Relight</button></footer></div></div>`,
+  pause: () => modal(`<header><h2>Paused</h2></header><div class="body">
+      <button class="btn ember" data-a="resume">${ic('play')}Resume</button><button class="btn glass" data-a="restart">${ic('retry')}Restart</button>
+      <button class="btn glass" data-a="photo">${ic('camera')}Photo mode</button><button class="btn glass" data-a="quit">${game.mode === 'night' ? 'Leave this night' : 'End run'}</button></div>`, true),
+  revive: () => modal(`<div class="ribbon lost">${lastResult?.why === 'storm' ? 'The storm caught you' : 'The lantern went out'}</div><div class="body" style="padding-top:14px"><p style="text-align:center;font-size:17px">Relight the lantern and carry on from here?</p></div>
+      <footer><button class="btn glass" data-a="norevive">No thanks</button><button class="btn ember" data-a="revive">Relight · <span class="ic">${I.fly}</span>40</button></footer>`, true),
   result: (r: Result) => {
-    const rp = rankProgress(); const night = r.mode === 'night';
-    const title = r.quit && r.mode !== 'drift' ? 'Run ended' : night ? (r.win ? 'Harbour reached' : 'The lantern went out') : r.mode === 'drift' ? 'Drift ended' : r.mode === 'daily' ? (r.win ? 'Daily Tide finished' : 'The lantern went out') : 'The lantern went out';
-    const newMask = r.mask & ~r.oldMask;
-    const starRow = night && r.win ? `<div class="bigstars">${[1, 2, 4].map((b, k) => `<i class="star ${(r.mask | r.oldMask) & b ? 'on' : ''} ${r.mask & b ? 'pop' : ''}" style="animation-delay:${0.25 + k * 0.3}s" data-s="${r.mask & b ? k : ''}"></i>`).join('')}</div>` : '';
+    const rp = rankProgress(), night = r.mode === 'night';
+    const title = r.win ? (night ? 'Harbour reached!' : r.mode === 'daily' ? 'Daily Tide done!' : 'What a drift') : r.quit ? 'Run ended' : r.why === 'storm' ? 'The storm caught you' : 'The lantern went out';
+    const stars = night && r.win ? `<div class="stars">${[1, 2, 4].map((b, k) => `<span class="ic ${(r.mask | r.oldMask) & b ? 'on' : ''} ${r.mask & b ? 'pop' : ''}" style="animation-delay:${0.2 + k * 0.28}s" data-s="${r.mask & b ? k : ''}">${I.star}</span>`).join('')}</div>` : '';
     const s = (v: string | number, l: string) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`;
-    const stats = night ? s(fmt(r.time), `time (goal ${fmt(r.par)})`) + s(`${r.flies}/${r.fliesTotal}`, 'fireflies') + s(r.near, 'close shaves') + s('×' + r.peak, 'best streak')
-      : s(r.score, r.best ? 'score, new best' : 'score') + s(r.dist + ' m', 'distance') + s(r.flies, 'fireflies') + s('×' + r.peak, 'best streak');
     const canNext = night && r.win && r.night < NIGHT_COUNT - 1 && nightUnlocked(r.night + 1);
     const blocked = night && r.win && r.night < NIGHT_COUNT - 1 && !canNext;
-    return `<div class="screen"><div class="panel"><header><h2>${title}</h2><span class="chip"><i class="fly"></i>+${r.earned}</span></header><div class="body">
-      ${starRow}${night && r.win && newMask === 0 && r.oldMask ? '<span class="muted" style="text-align:center">No new stars this time.</span>' : ''}
-      <div class="stats">${stats}</div>
-      ${r.unlocks.map(u => `<div class="unlock">Voyage rank up: ${u}</div>`).join('')}
-      <div><div class="bar"><i style="width:${Math.round(rp.frac * 100)}%"></i></div><span class="muted">Voyage rank ${rp.rank}${rp.next ? ` &middot; next: ${rp.next}` : ''}</span></div>
-      ${blocked ? `<span class="lockmsg">The next coast needs ${COAST_NEED[Math.floor((r.night + 1) / 10)]} stars. You have ${totalStars()}. Earn more on earlier nights.</span>` : ''}
-      </div><footer><button class="btn sm" data-a="share">Share</button><button class="btn" data-a="go:${night ? 'map' : 'modes'}">${night ? 'Map' : 'Back'}</button><button class="btn ${canNext ? '' : 'pri'}" data-a="again">${r.win ? 'Sail again' : 'Try again'}</button>${canNext ? `<button class="btn pri" data-a="pre:${r.night + 1}">Next night</button>` : ''}</footer></div></div>`;
+    return modal(`<div class="ribbon ${r.win ? '' : 'lost'}">${title}</div><div class="body" style="padding-top:12px">
+      ${stars}
+      <div class="big-score" data-count="${r.score}">0</div>
+      <div class="stats">${s(r.perfects, 'perfect')}${s('×' + r.chain, 'best chain')}${s(r.air.toFixed(1) + 's', 'in the air')}${night ? s(`${r.fliesGot}/${r.fliesTotal}`, 'fireflies') : s(r.dist + 'm', 'distance')}</div>
+      <div class="card"><span class="chip"><span class="ic">${I.fly}</span>+${r.earned}</span><div class="t"><div class="bar"><i style="width:${Math.round(rp.frac * 100)}%"></i></div><span class="muted">Voyage rank ${rp.rank}${rp.next ? ` · next: ${rp.next}` : ''}${night && r.win ? ` · best time ${fmt(save.bestTime[r.night])}` : ''}</span></div></div>
+      ${r.unlocks.map(u => `<div class="unlock">${ic('star')}Rank up! ${u}</div>`).join('')}
+      ${night && r.jar ? `<div class="jar">${ic('jar')}<div class="bar gold"><i style="width:${Math.min(100, save.jar / JAR * 100)}%"></i></div><span class="muted">${save.jar >= JAR ? '<b style="color:var(--gold1)">Jar full! Open it in Tasks</b>' : `${save.jar}/${JAR}`}</span></div>` : ''}
+      ${blocked ? `<span class="lockmsg">The next coast needs ${COAST_NEED[Math.floor((r.night + 1) / 8)]} stars. You have ${totalStars()}.</span>` : ''}
+      </div><footer><button class="round" data-a="share" aria-label="Share">${I.share}</button><button class="btn glass" data-a="go:${night ? 'map' : 'home'}">${night ? ic('map') + 'Map' : 'Home'}</button><button class="btn ${canNext ? 'glass' : 'ember'}" data-a="again">${ic('retry')}${r.win ? 'Again' : 'Try again'}</button>${canNext ? `<button class="btn ember" data-a="pre:${r.night + 1}">Next night${ic('play')}</button>` : ''}</footer>`);
   },
 };
 
 export function go(name: string, a: any = null) {
   screen = name; arg = a;
   ui.innerHTML = screens[name] ? screens[name](a) : '';
-  ui.className = name === 'title' || name === '' ? '' : 'dim';
-  $('hud').hidden = name !== '' || game.photo || !!game.story;
-  if (name === 'result' && a?.win && a.mode === 'night') ui.querySelectorAll<HTMLElement>('.star.pop').forEach(el => { const k = +(el.dataset.s || 0); setTimeout(() => { sfx.star(k); buzz('light'); }, 250 + k * 300); });
+  ui.className = name === '' || name === 'home' ? '' : 'scrim';
+  $('hud').hidden = name !== '' || game.photo || !!game.story || game.scene !== 'play';
+  if (name !== '') $('holdtip').hidden = true;
+  if (name === 'result') afterRender(a);
+  if (name === 'harbour') paintBoats();
+}
+function afterRender(r: Result) {
+  ui.querySelectorAll<HTMLElement>('.stars .pop').forEach(el => { const k = +(el.dataset.s || 0); setTimeout(() => { sfx.star(k); buzz('light'); }, 200 + k * 280); });
+  const el = ui.querySelector<HTMLElement>('[data-count]'); if (!el) return; const target = +el.dataset.count!; const t0 = performance.now();
+  const tick = (t: number) => { const u = Math.min(1, (t - t0) / 900); el.textContent = num(Math.round(target * (1 - Math.pow(1 - u, 3)))); if (u < 1 && el.isConnected) requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+}
+function paintBoats() {
+  ui.querySelectorAll<HTMLCanvasElement>('canvas[data-boat]').forEach(c => { const g = c.getContext('2d')!; g.clearRect(0, 0, c.width, c.height); game.painter.boat(g, 58, 70, 0, 1.25, c.dataset.boat!, '#ff8a3d', 1); });
 }
 
 function play(mode: Mode, night = 0) {
-  const begin = () => { game.start(mode, night); setupHud(); go(''); };
+  const begin = () => { game.start(mode, night); setupHud(); go(''); if (mode === 'night' && night === 0 && !save.seen.held) $('holdtip').hidden = false; };
   if (mode === 'night' && night === 0 && !save.seen.intro) { save.seen.intro = true; persist(); story('intro', begin); }
   else begin();
 }
-function story(key: string, done: () => void) { go(''); $('hud').hidden = true; $('hint').hidden = true; game.playStory(key, () => { $('storybar').hidden = true; done(); }); $('storybar').hidden = false; }
-function attract() { game.start('attract'); $('hud').hidden = true; $('hint').hidden = true; }
+function story(key: string, done: () => void) { go(''); $('hud').hidden = true; $('hint').hidden = true; $('storybar').hidden = false; game.playStory(key, () => { $('storybar').hidden = true; done(); }); }
+function home() { game.home(); go('home'); }
 
-function setupHud() {
-  const sim = game.sim!; const p = $('power');
-  p.hidden = sim.cfg.power === 'none'; p.classList.toggle('left', save.settings.left);
-  $('plabel').innerHTML = sim.cfg.power === 'spring' ? 'SPRING<br>TIDE' : 'STILL<br>WATER';
-  $('prog').hidden = !isFinite(sim.level.length);
-  lastHud = '';
-}
-let lastHud = '';
+let lastKey = '';
+function setupHud() { lastKey = ''; $('trackflag').innerHTML = I.flag; $('trackstorm').innerHTML = I.storm; $('hfi').innerHTML = I.fly; $('pause').innerHTML = I.pause; }
 function hud(sim: Sim) {
-  const max = sim.cfg.boat.hp + sim.cfg.hull; const key = `${sim.boat.hp}|${sim.fliesGot}|${Math.floor(sim.boat.x / 20)}|${Math.ceil(sim.powerCd * 10)}`;
-  if (key === lastHud) return; lastHud = key;
-  if (game.mode !== 'drift') $('hp').innerHTML = Array.from({ length: max }, (_, i) => `<i class="${i < sim.boat.hp ? '' : 'off'}"></i>`).join(''); else $('hp').innerHTML = '';
-  $('hf').textContent = isFinite(sim.level.length) ? `${sim.fliesGot}/${sim.fliesTotal}` : String(sim.fliesGot);
-  if (isFinite(sim.level.length)) { const f = Math.max(0, Math.min(1, sim.boat.x / sim.level.length)); $('progfill').style.width = f * 100 + '%'; $('progboat').style.left = f * 100 + '%'; $('dist').textContent = fmt(sim.t); }
-  else $('dist').textContent = game.mode === 'drift' ? '' : `${Math.round(sim.score)}`;
-  const cd = sim.powerMax > 0 ? Math.max(0, sim.powerCd) / sim.powerMax : 0;
-  $('pring').style.strokeDashoffset = String(163.4 * cd); $('power').classList.toggle('cd', cd > 0);
+  if (!$('holdtip').hidden && game.hold) { $('holdtip').hidden = true; save.seen.held = true; }
+  const fin = isFinite(sim.lvl.length), b = sim.b;
+  const key = `${b.hearts}|${sim.flies}|${Math.round(b.x / 30)}|${sim.chain}|${sim.fever}|${Math.round(sim.score / 10)}|${Math.round(sim.storm / 30)}`;
+  if (key === lastKey) return; lastKey = key;
+  const max = sim.cfg.hearts;
+  $('hearts').innerHTML = game.mode === 'drift' ? '' : Array.from({ length: max }, (_, i) => `<span class="ic ${i < b.hearts ? '' : 'off'}">${I.lantern}</span>`).join('');
+  $('hf').textContent = String(sim.flies);
+  $('score').textContent = num(Math.round(sim.score));
+  const L = fin ? sim.lvl.length : b.x + 2000, p = Math.min(1, b.x / L), sp = Math.max(0, Math.min(1, sim.storm / L));
+  $('trackfill').style.width = p * 100 + '%'; $('trackboat').style.left = p * 100 + '%';
+  $('trackstorm').style.left = sp * 100 + '%'; $('trackstorm').hidden = sim.cfg.noStorm || !fin; $('trackflag').hidden = !fin; $('track').style.visibility = fin ? 'visible' : 'hidden';
+  const ch = $('chain'); ch.classList.toggle('on', sim.chain > 0); ch.classList.toggle('fever', sim.fever);
+  $('mult').textContent = '×' + sim.mult;
+  $('dots').innerHTML = Array.from({ length: 3 }, (_, i) => `<i class="${i < sim.chain % 3 || sim.chain >= 15 ? 'on' : ''}"></i>`).join('');
+  $('danger').classList.toggle('on', !sim.cfg.noStorm && sim.stormGap < 300 && sim.done === 'no');
 }
 
 function afterResult(r: Result) {
   lastResult = r;
-  const show = () => { attractBehind(); go('result', r); };
+  const show = () => { if (game.scene !== 'play') game.home(); go('result', r); };
   if (r.mode === 'night' && r.win) {
-    const key = r.night === 9 ? 'coast1' : r.night === 19 ? 'coast2' : r.night === 29 ? 'ending' : '';
+    const key = r.night === 7 ? 'coast1' : r.night === 15 ? 'coast2' : r.night === 23 ? 'ending' : '';
     if (key && !save.seen[key]) { save.seen[key] = true; persist(); story(key, show); return; }
   }
   show();
 }
-function attractBehind() { /* keep the finished scene on screen behind the result card */ }
 
-const actions: Record<string, (a: string) => void> = {
-  go: a => { if (a === 'title' && game.mode !== 'attract') attract(); if ((a === 'map' || a === 'modes') && game.mode !== 'attract') attract(); go(a); },
-  pre: a => { if (game.mode !== 'attract') attract(); go('pre', +a); },
+const actions: Record<string, (a: string) => void | Promise<void>> = {
+  go: a => { if (a === 'home' || game.scene !== 'play' || game.ended) { if (a === 'home') return home(); } if (game.scene === 'play' && game.ended) game.home(); if (a === 'map') mapCoast = -1; go(a); },
+  coast: a => { mapCoast = +a; go('map'); },
+  pre: a => { if (game.scene === 'play' && game.ended) game.home(); go('pre', +a); },
   play: a => play('night', +a),
   mode: a => play(a as Mode),
-  tab: a => { harbourTab = a; go('harbour'); },
+  tab: a => { tab = a; go('harbour'); },
   boat: a => { save.boat = a; persist(); go('harbour'); },
-  power: a => { save.power = a as any; persist(); go('harbour'); },
-  up: a => { if (buyUpgrade(a as any)) { sfx.buy(); toast('Upgraded'); } go('harbour'); },
-  ink: a => { save.ink = a; persist(); go('harbour'); },
-  buyink: a => { if (buyInk(a)) { sfx.buy(); save.ink = a; persist(); toast('New ink unlocked'); } go('harbour'); },
+  buyboat: a => { if (buyBoat(a)) { sfx.buy(); save.boat = a; persist(); toast('New boat!'); } go('harbour'); },
   lantern: a => { save.lantern = a; persist(); go('harbour'); },
-  buylantern: a => { if (buyLantern(a)) { sfx.buy(); save.lantern = a; persist(); toast('New lantern unlocked'); } go('harbour'); },
-  claim: a => { const n = claimMission(+a); if (n) { sfx.buy(); toast(`+${n} fireflies`); } go('missions'); },
-  gift: () => { const n = claimDaily(); if (n) { sfx.buy(); toast(`Day ${((save.daily.streak - 1) % 7) + 1} gift: +${n} fireflies`); } go('missions'); },
+  up: a => { if (buyUpgrade(a as any)) { sfx.buy(); toast('Upgraded'); } go('harbour'); },
+  build: a => { if (buildItem(a)) { sfx.buy(); buzz('medium'); toast(`${VILLAGE.find(v => v.id === a)!.name} restored`); home(); } else go('village'); },
+  claim: a => { const n = claimMission(+a); if (n) { sfx.coin(); toast(`+${n} fireflies`); } go('tasks'); },
+  gift: () => { const n = claimDaily(); if (n) { sfx.buy(); toast(`Day ${((save.daily.streak - 1) % 7) + 1} gift: +${n} fireflies`); } go('tasks'); },
+  jar: () => { const r = openJar(); if (r) { sfx.buy(); buzz('medium'); toast(`Star jar: +${r.flies} fireflies${r.extra ? ' and the ' + r.extra : ''}`); } go('tasks'); },
   set: a => { const k = a as keyof typeof save.settings; save.settings[k] = !save.settings[k]; persist(); applyVolumes(); go('settings'); },
   askreset: () => go('settings', 'confirm'),
-  reset: () => { resetAll(); toast('Progress erased'); go('title'); },
-  scene: a => story(a, () => { attract(); go('letter'); }),
+  reset: () => { resetAll(); toast('Progress erased'); home(); },
+  scene: a => story(a, () => { home(); go('letter'); }),
   resume: () => { game.setPaused(false); go(''); },
-  restart: () => { play(game.mode, game.night); },
+  restart: () => play(game.mode, game.night),
   photo: () => { game.photo = true; go(''); $('hud').hidden = true; $('hint').hidden = true; $('photobar').hidden = false; },
   photoback: () => { game.photo = false; $('photobar').hidden = true; go('pause'); },
-  photoshare: async () => { const ok = await shareCanvas(game.canvas, 'Moonpull'); if (!ok) toast('Sharing is not available here'); },
-  quit: () => { game.setPaused(false); const r = game.quitRun(); if (r) afterResult(r); else { attract(); go('map'); } },
+  photoshare: async () => { if (!(await shareCanvas(game.out, 'Moonpull'))) toast('Sharing is not available here'); },
+  quit: () => { game.setPaused(false); const r = game.quitRun(); if (r) afterResult(r); else { home(); go('map'); } },
   revive: () => { if (save.flies >= 40) { save.flies -= 40; persist(); game.revive(); go(''); } },
   norevive: () => { if (lastResult) { game.commit(lastResult); afterResult(lastResult); } },
   again: () => { if (lastResult) play(lastResult.mode, lastResult.night); },
-  share: async () => { const r = lastResult; if (!r) return; const ok = await shareCanvas(game.canvas, r.mode === 'night' ? `Night ${r.night + 1} in Moonpull` : `I scored ${r.score} in Moonpull`); if (!ok) toast('Sharing is not available here'); },
+  share: async () => { const r = lastResult; if (!r) return; if (!(await shareCanvas(game.out, r.mode === 'night' ? `Night ${r.night + 1} in Moonpull: ${num(r.score)} points` : `${num(r.score)} points in Moonpull`))) toast('Sharing is not available here'); },
   skipstory: () => game.skipStory(),
 };
 
@@ -218,29 +242,29 @@ export function initUI(g: Game) {
   game = g;
   document.addEventListener('click', e => {
     const el = (e.target as HTMLElement).closest<HTMLElement>('[data-a]'); if (!el) return;
-    initAudio(); sfx.click();
+    initAudio(); sfx.click(); buzz('light');
     const [k, ...rest] = el.dataset.a!.split(':'); actions[k]?.(rest.join(':'));
   });
   document.addEventListener('pointerdown', () => initAudio(), { once: true });
-  $('pause').addEventListener('click', () => { if (game.sim && !game.ended && screen === '') { game.setPaused(true); go('pause'); } });
-  const pw = $('power');
-  pw.addEventListener('pointerdown', e => { e.preventDefault(); game.sim?.usePower(); });
+  $('pause').addEventListener('click', e => { e.stopPropagation(); if (game.sim && !game.ended && screen === '') { game.setPaused(true); go('pause'); } });
+  $('pause').addEventListener('pointerdown', e => e.stopPropagation());
   game.onHud = hud;
   game.onHint = s => { const h = $('hint'); h.textContent = s; h.hidden = !s || game.photo; };
   game.onStoryText = (s, i, n) => { $('storytext').textContent = s; $('storydots').textContent = n ? `${i + 1} / ${n} · tap to continue` : ''; };
-  game.onEnd = r => { $('hint').hidden = true; lastResult = r; if (r.canRevive) go('revive'); else afterResult(r); };
+  game.onEnd = r => { $('hint').hidden = true; $('danger').classList.remove('on'); lastResult = r; if (r.canRevive) go('revive'); else afterResult(r); };
   onBack(() => {
     if (game.story) return game.skipStory();
-    if (game.photo) return actions.photoback('');
+    if (game.photo) return void actions.photoback('');
     if (screen === '') { if (game.sim && !game.ended) { game.setPaused(true); go('pause'); } return; }
-    if (screen === 'pause') return actions.resume('');
-    if (screen === 'title') return exitApp();
-    if (screen === 'revive') return actions.norevive('');
-    actions.go(screen === 'pre' ? 'map' : 'title');
+    if (screen === 'pause') return void actions.resume('');
+    if (screen === 'home') return exitApp();
+    if (screen === 'revive') return void actions.norevive('');
+    if (screen === 'pre') return go('map');
+    home();
   });
-  onPause(() => { if (screen === '' && game.sim && !game.ended && !game.story && game.mode !== 'attract') { game.setPaused(true); go('pause'); } suspendAudio(true); });
+  onPause(() => { if (screen === '' && game.sim && !game.ended && !game.story) { game.setPaused(true); go('pause'); } suspendAudio(true); });
   onResume(() => suspendAudio(false));
-  attract(); go('title');
-  if (dailyAvailable() && save.stats.nights > 0) setTimeout(() => toast('A daily gift is waiting in Tasks'), 800);
+  home();
+  if (dailyAvailable() && save.stats.nights > 0) setTimeout(() => toast('A daily gift is waiting in Tasks'), 900);
 }
-export { RANKS };
+void POWERS_NOTE; void rankOf;
