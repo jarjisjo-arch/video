@@ -5,6 +5,9 @@ on:
     paths: ['moonpull/**', '.github/workflows/moonpull-android.yml']
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -51,3 +54,15 @@ jobs:
         with:
           name: moonpull-release-aab
           path: moonpull/android/app/build/outputs/bundle/release/app-release.aab
+      - name: Publish a direct APK download (no zip) as the "moonpull-latest" release
+        working-directory: moonpull/android/app/build/outputs/apk/debug
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app-debug.apk moonpull.apk
+          if gh release view moonpull-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload moonpull-latest moonpull.apk --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create moonpull-latest moonpull.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+              --title "Moonpull test build" --notes "Latest test build of Moonpull. Download moonpull.apk on your phone and open it to install."
+          fi

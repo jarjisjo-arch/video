@@ -2,8 +2,10 @@
 
 ## 1. Get a build onto your phone
 
-Every push runs the workflow "Moonpull Android build" on GitHub (Actions tab). Open the latest run and
-download `moonpull-debug-apk`. Unzip it, send `app-debug.apk` to your phone and install it.
+Every push builds the game on GitHub and puts it in the "Moonpull test build" release:
+open https://github.com/jarjisjo-arch/video/releases/tag/moonpull-latest on your phone, tap `moonpull.apk`,
+then open the downloaded file and allow installing from this source when Android asks.
+(The same file is also attached to each workflow run as `moonpull-debug-apk`, but that one comes zipped.)
 
 ## 2. Create your signing key (once, and keep it safe)
 
