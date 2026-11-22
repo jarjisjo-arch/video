@@ -20,8 +20,8 @@ export interface Result {
 }
 
 const HINTS: Record<string, string> = {
-  start: 'Hold anywhere: the moon pulls the sea down and the boat speeds up the slope. Let go before the next crest to fly.',
-  rock: 'A reef breaks the crest ahead. Let go early and fly over it.',
+  start: 'Hold anywhere to charge the moon. Let go and the sea throws the boat. Hold going downhill, let go going uphill.',
+  rock: 'A reef breaks the crest ahead. Let go on the slope before it and jump it.',
   arch: 'Low rock above the crest. Keep holding so the sea holds the boat down.',
   whale: 'A whale! Ride over its back for a huge throw.',
   ring: 'Fly through the lantern ring for bonus fireflies.',
@@ -179,6 +179,13 @@ export class Game {
       for (let i = 0; i < 3; i++) { const r = ((t * 1.6 + i / 3) % 1); g.globalAlpha = 1 - r; g.beginPath(); g.ellipse(bx, by + 4 * k, (20 + r * 60) * k, (4 + r * 10) * k, 0, 0, 7); g.stroke(); }
       g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
     }
+    // charge ring: fills while the moon is pulling
+    if (sim.charge > 0.02 && !b.air) {
+      const r = 30 * k, cy = by - 22 * k, full = sim.charge >= 1;
+      g.lineCap = 'round'; g.lineWidth = 3.5 * k; g.strokeStyle = hexA(P.ink.foam, 0.18); g.beginPath(); g.arc(bx, cy, r, 0, 7); g.stroke();
+      g.globalCompositeOperation = 'lighter'; g.strokeStyle = full ? hexA('#ffe27a', 0.75 + 0.25 * Math.sin(t * 20)) : hexA(P.ink.moon, 0.9);
+      g.beginPath(); g.arc(bx, cy, r, -Math.PI / 2, -Math.PI / 2 + sim.charge * Math.PI * 2); g.stroke(); g.globalCompositeOperation = 'source-over';
+    }
     P.particles(g, cam, this.fx);
     if (!sim.cfg.noStorm) P.storm(g, cam, P.sx(cam, sim.storm), t, Math.max(0, 1 - sim.stormGap / 500));
     P.grain(g, cam);
@@ -201,7 +208,7 @@ export class Game {
     const fx = this.fx, ink = this.painter.ink, red = save.settings.reduced, b = sim.b;
     for (const e of sim.events) {
       switch (e.k) {
-        case 'launch': sfx.launch(e.v); fx.burst(e.x, e.y, 10, ink.foam, 160, 600, 2); break;
+        case 'launch': sfx.launch(e.v + (e.surge ? 400 : 0)); fx.burst(e.x, e.y, e.surge ? 22 : 10, ink.foam, e.surge ? 240 : 160, 600, 2.2); if (e.surge) { fx.ring(e.x, e.y + 4, ink.moon, 16); buzz('light'); } break;
         case 'land':
           if (e.q === 'perfect') { sfx.land('perfect', e.air); buzz('medium'); fx.pop(e.x + 30, e.y - 60, 'Perfect!', '#ffd25a', 30); fx.burst(e.x, e.y, 18, '#ffe9a0', 220, 300, 2.2, true); fx.ring(e.x, e.y, '#ffe9a0', 14); }
           else if (e.q === 'good') { if (e.air > 0.25) { sfx.land('good', e.air); fx.burst(e.x, e.y, 12, ink.foam, 150, 600, 2.2); } }

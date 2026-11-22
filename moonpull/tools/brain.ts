@@ -19,6 +19,17 @@ function hitsAnything(sim: Sim, x: number, y: number) {
   for (const o of sim.lvl.obs) { if (o.t === 'rock' && y - 5 > sim.rockTop(o, x)) return true; if (o.t === 'arch' && y - 26 < sim.archBottom(o, x)) return true; }
   return false;
 }
+function jump(sim: Sim, reef: any): 'clears' | 'short' | 'hits' {
+  const b = sim.b, S = sim.surf, st = sim.cfg.boat;
+  const kick = (90 + 330 * sim.charge) * Math.min(1.3, 0.55 + b.s / 700);
+  let x = b.x, y = b.y, vx = b.vx, vy = b.vx * Math.min(S.d1(b.x), 0.15) - kick; const dt = 1 / 60;
+  for (let i = 0; i < 300; i++) {
+    vy += G * st.air * dt; x += vx * dt; y += vy * dt;
+    if (y - 5 > sim.rockTop(reef, x)) return 'hits';
+    if (y >= S.y(x)) return x > reef.x + reef.w ? 'clears' : 'short';
+  }
+  return 'clears';
+}
 /** returns whether to hold, given a skill 0..1 (1 = sharp) */
 export function decide(sim: Sim, skill = 1): boolean {
   const b = sim.b, S = sim.surf;
@@ -27,6 +38,16 @@ export function decide(sim: Sim, skill = 1): boolean {
   // rocks ahead in the next trough: do not press on the upslope before them, launch instead
   if (!b.air) {
     const d1 = S.d1(b.x);
+    // a reef ahead: keep charging until a jump from here would clear it, then let go
+    const reef = sim.lvl.obs.find(o => o.t === 'rock' && o.x - b.x > -10 && o.x - b.x < 560) as any;
+    // right at a reef with no charge: stay light and let the crest throw the boat
+    if (reef && reef.x - b.x < 400 && d1 <= 0.02) {
+      // uphill towards a reef: charge, and let go as soon as a jump from here clears it
+      if (!sim.hold) return reef.x - b.x > 60; // start charging
+      const j = jump(sim, reef);
+      if (j === 'clears' || reef.x - b.x < 70) return false;
+      return true;
+    }
     if (d1 > 0.02) {
       // pressing on a downslope only pays if we are not about to land in a rock-filled trough with too little speed
       return true;

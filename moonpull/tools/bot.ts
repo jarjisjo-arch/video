@@ -28,7 +28,7 @@ if (process.argv[1]?.endsWith('bot.ts')) {
     for (const bi of [0, 1, 2]) { const lvl = getLevel(i); const sim = new Sim(lvl, { boat: BOATS[bi], magnet: 0, hearts: 99, noStorm: true });
       while (sim.done === 'no' && sim.t < 200) { sim.update(1 / 60, decide(sim)); sim.events.length = 0; }
       avg = Math.min(avg, lvl.length / sim.t); }
-    const r = 0.58 + 0.22 * (i / (NIGHT_COUNT - 1));
+    const r = 0.56 + 0.17 * (i / (NIGHT_COUNT - 1));
     storms.push([Math.round(avg * r * 0.85), Math.round(avg * r * 1.12)]);
   }
   if (process.argv.includes('--storms')) { writeFileSync(new URL('../src/sim/pars.ts', import.meta.url), `export const PARS: number[] = [];\nexport const STORMS: number[][] = ${JSON.stringify(storms)};\n`); console.log('storms written, run again with --write'); process.exit(0); }

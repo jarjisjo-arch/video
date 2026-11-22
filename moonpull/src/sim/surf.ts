@@ -5,7 +5,9 @@ export const HOLD = 2.9;       // extra weight while the moon pulls (on the wate
 export const DIVE = 2.4;       // extra weight while the moon pulls (in the air)
 export const VMIN = 120, VMAX = 760;
 export const LIFT = 0.42;
-export const THROW = 0.3;      // upward kick the sea gives as it lets the boat go      // how easily the released sea throws the boat off a rounded crest
+export const UPHOLD = 2.3;    // holding on an upslope costs a little speed
+export const CHARGE_T = 0.75;  // seconds of holding for a full charge
+export const THROW = 0.3;      // upward kick when a fast boat leaves a rounded crest on its own
 const STEP = 1 / 120;
 
 /** Smooth surface through alternating extrema, cosine-interpolated. */
@@ -44,6 +46,7 @@ export class Sim {
   t = 0; acc = 0;
   b = { x: 80, y: BASE, vx: 200, vy: 0, s: 200, air: false, ang: 0, airT: 0, inv: 0, hearts: 3, lastAir: 0 };
   hold = false; pull = 0;          // pull: smoothed 0..1 for visuals
+  charge = 0; private wasHold = false; // charge builds while holding on the water and is spent on release
   storm = 0; stormV = 0;
   chain = 0; bestChain = 0; fever = false;
   score = 0; flies = 0; fliesGot = 0; fliesTotal = 0; perfects = 0; nears = 0; crashes = 0; rings = 0; airTotal = 0; bestAir = 0;
@@ -82,17 +85,24 @@ export class Sim {
     const b = this.b, S = this.surf, st = this.cfg.boat, h = this.hold && this.done === 'no';
     this.t += dt;
     this.pull += ((h ? 1 : 0) - this.pull) * Math.min(1, dt * 10);
+    const released = !h && this.wasHold; this.wasHold = h;
+    if (h && !b.air) this.charge = Math.min(1, this.charge + dt / CHARGE_T); else if (!h) this.charge = Math.max(0, this.charge - dt * 3);
     if (b.inv > 0) b.inv -= dt;
 
     if (!b.air) {
       const d1 = S.d1(b.x), d2 = S.d2(b.x), n = Math.sqrt(1 + d1 * d1);
-      const g = G * st.grav * (h ? HOLD : 1);
+      const g = G * st.grav * (h ? (d1 > 0 ? HOLD : UPHOLD) : 1);
       b.s += g * (d1 / n) * dt;
       b.s -= (0.00042 * b.s * b.s + 6) * dt;
       b.s = Math.max(VMIN, Math.min(VMAX, b.s));
       b.vx = b.s / n; b.vy = b.vx * d1;
       // leave the water when the swell curves away faster than gravity can hold the boat down
-      if (!h && d2 * b.vx * b.vx > G * LIFT && d1 < 0.05) {
+      if (released && this.charge > 0.1) {
+        // the moon lets go: the sea surges up and throws the boat
+        const kick = (90 + 330 * this.charge) * Math.min(1.3, 0.55 + b.s / 700);
+        b.air = true; b.airT = 0; b.vy = b.vx * Math.min(d1, 0.15) - kick; this.charge = 0;
+        this.events.push({ k: 'launch', x: b.x, y: b.y, v: b.s, surge: true });
+      } else if (!h && d2 * b.vx * b.vx > G * LIFT && d1 < 0.05) {
         b.air = true; b.airT = 0; b.vy -= THROW * b.s; this.events.push({ k: 'launch', x: b.x, y: b.y, v: b.s });
       } else {
         b.x += b.vx * dt; b.y = S.y(b.x);

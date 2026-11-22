@@ -23,7 +23,7 @@ export function build(script: string, lvl: Level) {
     ex.push(tx, cx); ey.push(ty, cy);
     for (const m of mods) {
       const k = m[0], n = parseFloat(m.slice(1)) || 0;
-      if (k === 'r') lvl.obs.push({ t: 'rock', x: cx + 18, w: 64, top: cy - (n || 8) });
+      if (k === 'r') lvl.obs.push({ t: 'rock', x: cx - 32, w: 64, top: cy - (n || 8) });
       if (k === 'a') { const w = Math.min(240, L * 0.5); lvl.obs.push({ t: 'arch', x: cx - w * 0.6, w, bottom: cy - 34 }); }
       if (k === 'w') lvl.obs.push({ t: 'whale', x: tx - 80, w: 160 });
       if (k === 'o') lvl.obs.push({ t: 'ring', x: cx + 90, y: cy - (n || 30) });

@@ -21,7 +21,7 @@ export interface Level {
 export interface BoatStats { id: string; grav: number; air: number; land: number; hearts: number }
 
 export type Ev =
-  | { k: 'launch'; x: number; y: number; v: number }
+  | { k: 'launch'; x: number; y: number; v: number; surge?: boolean }
   | { k: 'land'; x: number; y: number; q: 'perfect' | 'good' | 'bad'; air: number; v: number }
   | { k: 'fly'; x: number; y: number }
   | { k: 'ring'; x: number; y: number }
