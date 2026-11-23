@@ -38,8 +38,9 @@ export class Post {
   out: HTMLCanvasElement; src: HTMLCanvasElement; gl: WebGLRenderingContext | null = null;
   private progs: Record<string, WebGLProgram> = {}; private tex!: WebGLTexture; private fbs: { fb: WebGLFramebuffer; tex: WebGLTexture; w: number; h: number }[] = [];
   grade: Grade = GRADES[0]; flash = 0; flashC: [number, number, number] = [1, 1, 1]; bloomBoost = 0;
-  constructor(out: HTMLCanvasElement, src: HTMLCanvasElement) {
+  constructor(out: HTMLCanvasElement, src: HTMLCanvasElement, off = false) {
     this.out = out; this.src = src;
+    if (off) return;
     try {
       const gl = out.getContext('webgl', { antialias: false, alpha: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' }) as WebGLRenderingContext | null;
       if (gl) { this.gl = gl; this.setup(); }

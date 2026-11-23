@@ -32,7 +32,7 @@ export class Painter {
   ink: Ink; coast = -1; moon!: HTMLCanvasElement; clouds: HTMLCanvasElement[] = []; strips: Strip[] = []; paper!: CanvasPattern | null; private n = fbm(3);
   constructor(coast: number) { this.ink = INKS[0]; this.setCoast(coast); }
   setCoast(c: number) {
-    if (c === this.coast) return; this.coast = c; this.ink = INKS[c];
+    if (c === this.coast) return; this.coast = c; this.ink = INKS[c]; this.glowTex = null;
     this.moon = moonTex(this.ink); this.clouds = [0, 1, 2, 3].map(i => cloudTex(this.ink, 11 + i * 7 + c * 3, 380 + i * 60, 130 + i * 14));
     this.strips = [0, 1, 2].map(l => coastStrip(this.ink, c, l, 100 + c * 13 + l * 5));
     const p = document.createElement('canvas').getContext('2d')!; this.paper = p.createPattern(paperTex(), 'repeat');
@@ -109,7 +109,7 @@ export class Painter {
 
   /** the playfield water. surf(x) gives world y. */
   sea(g: G, cam: Cam, t: number, surf: (x: number) => number, moonX: number, fever: number, lantern?: { x: number; y: number; a: number; c: string }) {
-    const ink = this.ink, { W, H } = cam, step = 7;
+    const ink = this.ink, { W, H } = cam, step = Math.max(7, Math.round(W / 130));
     const pts: number[] = []; let minY = 1e9;
     for (let x = -step; x <= W + step; x += step) { const wx = cam.x + x / cam.k; const y = this.sy(cam, surf(wx) + ripple(wx, t)); pts.push(y); if (y < minY) minY = y; }
     const sea = fever > 0 ? mix(ink.sea, FEVER.sea, fever * 0.5) : ink.sea;
@@ -120,7 +120,7 @@ export class Painter {
     // light caught inside the crest
     const line = new Path2D(); pts.forEach((y, i) => i ? line.lineTo(i * step - step, y + 10 * cam.k) : line.moveTo(-step, y + 10 * cam.k));
     g.strokeStyle = fever > 0 ? mix(ink.seaLight, FEVER.light, fever) : ink.seaLight; g.globalAlpha = 0.32; g.lineWidth = 22 * cam.k; g.stroke(line);
-    g.globalAlpha = 0.18; g.lineWidth = 46 * cam.k; g.stroke(line); g.globalAlpha = 1;
+    g.globalAlpha = 1;
     // drifting streaks under the surface
     g.strokeStyle = ink.seaLight; g.lineWidth = 1.4 * cam.k; g.globalAlpha = 0.22; g.beginPath();
     for (let i = 0; i < 26; i++) {
@@ -261,11 +261,18 @@ export class Painter {
     for (const f of lvl.flies) {
       if (f.got) continue; const x = this.sx(cam, f.x); if (x < -20 || x > cam.W + 20) continue;
       const y = this.sy(cam, f.y + Math.sin(t * 2.4 + f.x * 0.05) * 3), p = 0.65 + 0.35 * Math.sin(t * 5 + f.x);
-      const gl = g.createRadialGradient(x, y, 0, x, y, 12 * k); gl.addColorStop(0, hexA(ink.fly, 0.55 * p)); gl.addColorStop(1, hexA(ink.fly, 0));
-      g.fillStyle = gl; g.fillRect(x - 12 * k, y - 12 * k, 24 * k, 24 * k);
-      g.fillStyle = '#fffbe8'; g.beginPath(); g.arc(x, y, 2.4 * k, 0, 7); g.fill();
+      g.globalAlpha = p; g.drawImage(this.glow(), x - 13 * k, y - 13 * k, 26 * k, 26 * k);
     }
-    g.globalCompositeOperation = 'source-over';
+    g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+  }
+  private glowTex: HTMLCanvasElement | null = null;
+  /** firefly glow, painted once */
+  glow() {
+    if (this.glowTex) return this.glowTex;
+    const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d')!;
+    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, hexA(this.ink.fly, 0.6)); gr.addColorStop(1, hexA(this.ink.fly, 0));
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64); g.fillStyle = '#fffbe8'; g.beginPath(); g.arc(32, 32, 6, 0, 7); g.fill();
+    return (this.glowTex = c);
   }
 
   harbour(g: G, cam: Cam, surf: Surface, endX: number, t: number, lantern: string) {

@@ -37,7 +37,7 @@ export class Game {
   hold = false; paused = false; photo = false; ended = false; private endT = 0; slow = 0;
   time = 0; private last = 0; private wakeT = 0; private ringT = 0; private hintT = 0; private trailT = 0;
   ghost?: number[]; lantern = '#ff8a3d'; boatKind = 'paper';
-  story: { panels: typeof SCENES[string]; i: number; t: number; done: () => void } | null = null;
+  story: { panels: typeof SCENES[string]; i: number; t: number; shown: number; done: () => void } | null = null;
   onEnd: (r: Result) => void = () => {}; onHud: (s: Sim) => void = () => {}; onHint: (s: string) => void = () => {};
   onStoryText: (s: string, i: number, n: number) => void = () => {};
 
@@ -51,10 +51,12 @@ export class Game {
     requestAnimationFrame(t => this.frame(t));
   }
 
+  /** render quality: 2 sharp + glow, 1 softer + glow, 0 soft without the glow pass. Lowered automatically on slow phones. */
+  quality = 2; private perf = { n: 0, t: 0, checked: 0 };
   resize() {
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const dpr = Math.min(this.quality === 2 ? 1.6 : 1.25, window.devicePixelRatio || 1);
     let w = Math.round(window.innerWidth * dpr), h = Math.round(window.innerHeight * dpr);
-    const cap = 1.9e6; if (w * h > cap) { const s = Math.sqrt(cap / (w * h)); w = Math.round(w * s); h = Math.round(h * s); }
+    const cap = [0.45e6, 0.7e6, 1.05e6][this.quality]; if (w * h > cap) { const s = Math.sqrt(cap / (w * h)); w = Math.round(w * s); h = Math.round(h * s); }
     this.W = w; this.H = h; this.src.width = w; this.src.height = h;
     if (this.post.ok) this.post.resize(w, h); else { this.out.width = w; this.out.height = h; }
     this.cam.W = w; this.cam.H = h;
@@ -62,7 +64,7 @@ export class Game {
 
   private bindInput() {
     const c = this.out; let ids = new Set<number>();
-    c.addEventListener('pointerdown', e => { if (this.story) { this.advanceStory(); return; } ids.add(e.pointerId); this.hold = true; try { c.setPointerCapture(e.pointerId); } catch { /* ok */ } });
+    c.addEventListener('pointerdown', e => { if (this.story) { this.advanceStory(); return; } if (this.scene !== 'play') return; ids.add(e.pointerId); this.hold = true; try { c.setPointerCapture(e.pointerId); } catch { /* ok */ } });
     const up = (e: PointerEvent) => { ids.delete(e.pointerId); if (!ids.size) this.hold = false; };
     c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up);
     window.addEventListener('keydown', e => { if (e.code === 'Space') { this.hold = true; e.preventDefault(); } });
@@ -91,12 +93,12 @@ export class Game {
 
   playStory(key: string, done: () => void) {
     this.sim = null; this.scene = 'story'; quiet();
-    this.story = { panels: SCENES[key], i: 0, t: 0, done };
+    this.story = { panels: SCENES[key], i: 0, t: 0, shown: performance.now(), done };
     this.onStoryText(this.story.panels[0].text, 0, this.story.panels.length);
   }
   advanceStory() {
-    const s = this.story; if (!s || s.t < 0.5) return;
-    s.i++; s.t = 0; sfx.click();
+    const s = this.story; if (!s || performance.now() - s.shown < 350) return;
+    s.i++; s.t = 0; s.shown = performance.now(); sfx.click();
     if (s.i >= s.panels.length) { this.story = null; this.onStoryText('', 0, 0); s.done(); }
     else this.onStoryText(s.panels[s.i].text, s.i, s.panels.length);
   }
@@ -106,7 +108,9 @@ export class Game {
 
   private frame(now: number) {
     requestAnimationFrame(t => this.frame(t));
-    let dt = Math.min(0.05, (now - this.last) / 1000 || 0); this.last = now; this.time += dt;
+    const raw = (now - this.last) / 1000 || 0;
+    let dt = Math.min(0.07, raw); this.last = now; this.time += dt;
+    this.watchPerf(raw);
     const g = this.g, t = this.time;
     g.setTransform(1, 0, 0, 1, 0, 0);
     if (this.story) {
@@ -135,7 +139,26 @@ export class Game {
     }
     this.post.flash = Math.max(this.post.flash - dt * 2.5, this.fx.flash * 0.6);
     this.post.bloomBoost = this.sim?.fever ? 0.35 : 0;
-    if (this.post.ok) this.post.render(t);
+    if (this.post.ok && this.quality > 0) this.post.render(t);
+  }
+
+  /** after a few seconds of play, step quality down if frames are slow */
+  private watchPerf(raw: number) {
+    if (this.scene !== 'play' || this.paused || raw <= 0 || raw > 0.5 || this.quality === 0 || !this.post.ok) { this.perf.n = 0; this.perf.t = 0; return; }
+    this.perf.n++; this.perf.t += raw;
+    if (this.perf.n >= 90 || (this.perf.t >= 2 && this.perf.n >= 8)) {
+      const fps = this.perf.n / this.perf.t; this.perf.n = 0; this.perf.t = 0;
+      if (fps < 45) this.setQuality(this.quality - 1);
+    }
+  }
+  setQuality(q: number) {
+    q = Math.max(0, Math.min(2, q)); if (q === this.quality) return;
+    this.quality = q;
+    if (q === 0) { // draw straight to the screen: no texture upload, no glow pass
+      const c = document.createElement('canvas'); c.id = 'c'; c.className = this.out.className; this.out.replaceWith(c); this.out = c;
+      this.src = c; this.g = c.getContext('2d')!; this.post = new Post(c, c, true); this.bindInput();
+    }
+    this.resize();
   }
 
   private camera(sim: Sim, dt: number) {
