@@ -1,5 +1,5 @@
-// Gemfall app controller: screens, level map, HUD, input, overlays, boosters and saved progress.
-import { LEVELS, WORLDS, MAP_PLATFORMS } from './levels.js';
+// Gemfall app controller: screens, level map, lives, HUD, input, overlays, boosters and saved progress.
+import { LEVELS, WORLDS, MAP_PLATFORMS, getLevel, layoutCount } from './levels.js';
 import { Renderer } from './render.js';
 import { Game } from './game.js';
 import * as audio from './audio.js';
@@ -8,10 +8,12 @@ const $ = (id) => document.getElementById(id);
 const A = 'assets/';
 const GEM_FILES = ['gem-ruby', 'gem-topaz', 'gem-emerald', 'gem-sapphire', 'gem-amethyst', 'gem-pearl'];
 const GEM_NAMES = ['rubies', 'topazes', 'emeralds', 'sapphires', 'amethysts', 'pearls'];
+const MAX_LIVES = 3, LIFE_MS = 20 * 60 * 1000;
+const LAST = LEVELS.length;
 
 // ---------- saved progress (browser storage, optional) ----------
 const SAVE_KEY = 'gemfall-save-v1';
-function defaults() { return { unlocked: 1, stars: {}, best: {}, boosters: { hammer: 3, shuffle: 2 }, sfx: true, music: true, rewarded: {} }; }
+function defaults() { return { unlocked: 1, stars: {}, best: {}, boosters: { hammer: 3, shuffle: 2 }, sfx: true, music: true, rewarded: {}, lives: MAX_LIVES, livesAt: 0 }; }
 function loadSave() {
   try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); return Object.assign(defaults(), s || {}); } catch (e) { return defaults(); }
 }
@@ -20,15 +22,49 @@ let save = loadSave();
 audio.setPrefs(save.sfx, save.music);
 const totalStars = () => Object.values(save.stars).reduce((a, b) => a + b, 0);
 
+// ---------- lives: lose one on a failed or abandoned level, one refills every 20 minutes ----------
+function syncLives() {
+  if (save.lives >= MAX_LIVES) { save.lives = MAX_LIVES; save.livesAt = 0; return; }
+  const now = Date.now();
+  if (!save.livesAt) { save.livesAt = now; persist(); }
+  const gained = Math.floor((now - save.livesAt) / LIFE_MS);
+  if (gained > 0) {
+    save.lives = Math.min(MAX_LIVES, save.lives + gained);
+    save.livesAt = save.lives >= MAX_LIVES ? 0 : save.livesAt + gained * LIFE_MS;
+    persist();
+  }
+}
+function nextLifeMs() { syncLives(); return save.lives >= MAX_LIVES ? 0 : Math.max(0, LIFE_MS - (Date.now() - save.livesAt)); }
+function fmt(ms) { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
+function loseLife() {
+  syncLives();
+  if (save.lives >= MAX_LIVES) save.livesAt = Date.now();
+  save.lives = Math.max(0, save.lives - 1);
+  persist(); renderLives();
+}
+function hearts() {
+  return `<div class="hearts" role="img" aria-label="${save.lives} of ${MAX_LIVES} lives">${[0, 1, 2].map((k) => `<img src="${A}ui-heart.png" class="${k < save.lives ? '' : 'off'}" alt="">`).join('')}</div>`;
+}
+function renderLives() {
+  const ms = nextLifeMs();
+  document.querySelectorAll('.lives-count').forEach((el) => { el.textContent = save.lives; });
+  document.querySelectorAll('.lives-time').forEach((el) => { el.textContent = ms ? fmt(ms) : 'Full'; });
+  document.querySelectorAll('.lives-wait').forEach((el) => { el.textContent = ms ? fmt(ms) : 'now'; });
+  if (ms === 0) document.querySelectorAll('[data-waiting]').forEach((b) => { b.removeAttribute('data-waiting'); b.dataset.act = b.dataset.after; b.textContent = 'Play'; b.classList.add('btn-green'); });
+}
+setInterval(renderLives, 1000);
+
 // ---------- assets ----------
 const IMG = {};
 function loadImg(src) { return new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(i); i.src = src; }); }
 async function preload() {
   const list = [...GEM_FILES.map((f) => A + f + '.png'), A + 'sp-prism.png', A + 'ui-chest.png', A + 'tile-stone.png', A + 'ui-star.png',
-    A + 'map.jpg', A + 'bg-cave.jpg', A + 'logo.png', A + 'mascot-happy.png', A + 'mascot-oops.png'];
+    A + 'ob-chain.png', A + 'ob-crystal.png', A + 'ob-bomb.png',
+    A + 'map.jpg', A + 'bg-cave.jpg', A + 'logo.png', A + 'mascot-happy.png', A + 'mascot-oops.png', A + 'ui-heart.png', A + 'ui-hourglass.png', A + 'ui-crown.png'];
   let done = 0;
   const imgs = await Promise.all(list.map((s) => loadImg(s).then((i) => { done++; $('loadBar').style.width = (done / list.length * 100) + '%'; return i; })));
   IMG.gems = imgs.slice(0, 6); IMG.prism = imgs[6]; IMG.chest = imgs[7]; IMG.stone = imgs[8]; IMG.star = imgs[9];
+  IMG.chain = imgs[10]; IMG.crystal = imgs[11]; IMG.bomb = imgs[12];
   try { await document.fonts.load('30px "Lilita One"'); } catch (e) { /* fallback font */ }
 }
 
@@ -37,21 +73,17 @@ let rd = null, game = null, current = 0, hammerMode = false, iceIcon = '', endTi
 function show(id) { document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === id)); }
 
 // ---------- goal helpers ----------
-function layoutCount(lv, type) {
-  let n = 0;
-  lv.layout.join('').split('').forEach((ch) => {
-    if (type === 'ice') n += ch === 'i' ? 1 : ch === 'I' ? 2 : 0;
-    if (type === 'stone') n += ch === 's' ? 1 : ch === 'S' ? 2 : 0;
-  });
-  return n;
-}
-function goalAmount(lv, g) { return g.type === 'ice' || g.type === 'stone' ? layoutCount(lv, g.type) : g.target; }
+const COUNTED = ['ice', 'stone', 'lock', 'crystal'];
+function goalAmount(lv, g) { return COUNTED.includes(g.type) ? layoutCount(lv.layout, g.type) : g.target; }
 function goalIcon(g) {
-  return { score: A + 'ui-star.png', ice: iceIcon, stone: A + 'tile-stone.png', chest: A + 'ui-chest.png', collect: A + GEM_FILES[g.color] + '.png' }[g.type];
+  return { score: A + 'ui-star.png', ice: iceIcon, stone: A + 'tile-stone.png', chest: A + 'ui-chest.png', lock: A + 'ob-chain.png', crystal: A + 'ob-crystal.png', collect: A + GEM_FILES[g.color] + '.png' }[g.type];
 }
 function goalText(lv, g) {
   const n = goalAmount(lv, g);
-  return { score: `Score ${n.toLocaleString()}`, ice: `Crack ${n} ice`, stone: `Break ${n} stone`, chest: `Collect ${n} chest${n > 1 ? 's' : ''}`, collect: `Collect ${n} ${GEM_NAMES[g.color]}` }[g.type];
+  return {
+    score: `Score ${n.toLocaleString()}`, ice: `Crack ${n} ice`, stone: `Break ${n} stone`, chest: `Collect ${n} chest${n > 1 ? 's' : ''}`,
+    lock: `Snap ${n} chain${n > 1 ? 's' : ''}`, crystal: `Clear all crystal`, collect: `Collect ${n} ${GEM_NAMES[g.color]}`
+  }[g.type];
 }
 function worldOf(n) { let w = WORLDS[0]; WORLDS.forEach((x) => { if (n >= x.from) w = x; }); return w; }
 
@@ -59,22 +91,25 @@ function worldOf(n) { let w = WORLDS[0]; WORLDS.forEach((x) => { if (n >= x.from
 function modal(html) {
   $('modal').innerHTML = html;
   $('overlay').classList.remove('hidden');
+  renderLives();
   const first = $('modal').querySelector('.btn');
   if (first) setTimeout(() => first.focus({ preventScroll: true }), 50);
 }
 function closeModal() { $('overlay').classList.add('hidden'); $('modal').innerHTML = ''; }
 const closeX = '<button class="round close-x" data-act="close" aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>';
+function inProgress() { return game && !game.ended && game.moves < game.L.moves; }
 $('modal').addEventListener('click', (e) => {
   const b = e.target.closest('[data-act]');
   if (!b) return;
   audio.unlock(); audio.sfx('click');
   const act = b.dataset.act;
-  if (act === 'close') closeModal();
-  else if (act === 'play') startLevel(+b.dataset.level);
-  else if (act === 'map') { closeModal(); openMap(); }
-  else if (act === 'resume') closeModal();
-  else if (act === 'restart') startLevel(current);
-  else if (act === 'next') startLevel(Math.min(LEVELS.length - 1, current + 1));
+  if (act === 'close' || act === 'resume') closeModal();
+  else if (act === 'play') tryPlay(+b.dataset.level);
+  else if (act === 'map') { if (inProgress()) confirmQuit('map'); else openMap(); }
+  else if (act === 'restart') { if (inProgress()) confirmQuit('restart'); else tryPlay(current); }
+  else if (act === 'next') tryPlay(current + 1);
+  else if (act === 'quit-map') { loseLife(); game.destroy(); openMap(); }
+  else if (act === 'quit-restart') { loseLife(); game.destroy(); tryPlay(current); }
   else if (act === 'sfx' || act === 'music') {
     save[act] = !save[act]; persist(); audio.setPrefs(save.sfx, save.music);
     b.setAttribute('aria-pressed', String(save[act])); syncSoundBtn();
@@ -93,37 +128,63 @@ function openSettings() {
     <div class="actions"><button class="btn btn-purple" data-act="close">Done</button>
     <button class="btn btn-orange" data-act="reset" style="font-size: 18px; height: 48px">Reset progress</button></div>`);
 }
+function confirmQuit(then) {
+  modal(`<img class="mascot" src="${A}mascot-oops.png" alt="">
+    <h2 class="gold-title">Leave the level?</h2>
+    <div class="meta">You have already made a move, so leaving now costs a life.</div>${hearts()}
+    <div class="actions"><button class="btn btn-green" data-act="resume">Keep playing</button>
+    <button class="btn btn-orange" data-act="quit-${then}">${then === 'map' ? 'Leave' : 'Restart'} (lose a life)</button></div>`);
+}
+function showNoLives(after) {
+  modal(`${closeX}<img class="mascot" src="${A}ui-hourglass.png" alt="" style="height: 110px; margin: 4px 0">
+    <h2 class="gold-title">Out of lives</h2>
+    <div class="meta">Time for a break! A new life arrives in <b class="lives-wait">${fmt(nextLifeMs())}</b>.</div>${hearts()}
+    <div class="meta" style="font-size: 13px">Lives refill one every 20 minutes, up to ${MAX_LIVES}.</div>
+    <div class="actions"><button class="btn btn-purple" data-waiting="1" data-act="close" data-after="play" data-level="${after}">Waiting…</button></div>`);
+}
+function tryPlay(i) {
+  syncLives();
+  if (save.lives <= 0) { showNoLives(i); return; }
+  startLevel(i);
+}
 
 // ---------- title ----------
-function openTitle() { show('title'); $('titleStars').textContent = totalStars(); }
+function openTitle() { show('title'); $('titleStars').textContent = totalStars(); renderLives(); }
 $('playBtn').addEventListener('click', () => { audio.unlock(); audio.sfx('click'); openMap(); });
 $('titleSettings').addEventListener('click', () => { audio.unlock(); audio.sfx('click'); openSettings(); });
 
 // ---------- map ----------
+// Levels 1-60 use the first 60 platforms; the Endless Dig starts on a fresh map section.
+const PER = MAP_PLATFORMS.length;
+const ENDLESS_SLOT = Math.ceil(LAST / PER) * PER;
+const slotOf = (n) => (n <= LAST ? n - 1 : ENDLESS_SLOT + (n - LAST - 1));
+const MAP_FILTERS = ['none', 'hue-rotate(-28deg) saturate(1.1)', 'hue-rotate(40deg) saturate(1.15)', 'hue-rotate(-60deg) saturate(0.75) brightness(1.08)',
+  'hue-rotate(-95deg) saturate(1.3)', 'hue-rotate(75deg) saturate(1.1)', 'hue-rotate(140deg) saturate(1.2)', 'hue-rotate(200deg) saturate(1.1)'];
 function openMap() {
   clearTimeout(endTimer);
   closeModal();
   if (game) { game.destroy(); }
-  show('map'); buildMap();
+  show('map'); buildMap(); renderLives();
 }
 function buildMap() {
   const inner = $('mapInner');
   inner.innerHTML = '';
-  const W = $('app').clientWidth, secH = W * 1536 / 864, nSec = Math.ceil(LEVELS.length / MAP_PLATFORMS.length), pad = 150;
+  const shown = Math.max(LAST, save.unlocked + 4);
+  const W = $('app').clientWidth, secH = W * 1536 / 864, nSec = Math.floor(slotOf(shown) / PER) + 1, pad = 150;
   inner.style.height = (nSec * secH + pad) + 'px';
-  const filters = ['none', 'hue-rotate(-28deg) saturate(1.1)', 'hue-rotate(40deg) saturate(1.15)'];
+  const secTop = (s) => (nSec - 1 - s) * secH;
   for (let s = 0; s < nSec; s++) {
     const img = document.createElement('img');
     img.className = 'sec'; img.src = A + 'map.jpg'; img.alt = '';
-    img.style.top = ((nSec - 1 - s) * secH) + 'px'; img.style.height = secH + 'px'; img.style.filter = filters[s % filters.length];
+    img.style.top = secTop(s) + 'px'; img.style.height = secH + 'px'; img.style.filter = MAP_FILTERS[s % MAP_FILTERS.length];
     inner.appendChild(img);
   }
-  const cur = Math.min(save.unlocked, LEVELS.length);
+  const cur = save.unlocked;
   let curPos = null;
-  LEVELS.forEach((lv, i) => {
-    const s = Math.floor(i / MAP_PLATFORMS.length), [px, py] = MAP_PLATFORMS[i % MAP_PLATFORMS.length];
-    const x = px / 864 * W, y = (nSec - 1 - s) * secH + py / 1536 * secH;
-    const n = i + 1, st = save.stars[n] || 0, locked = n > save.unlocked, isCur = n === cur;
+  for (let n = 1; n <= shown; n++) {
+    const slot = slotOf(n), s = Math.floor(slot / PER), [px, py] = MAP_PLATFORMS[slot % PER];
+    const x = px / 864 * W, y = secTop(s) + py / 1536 * secH;
+    const st = save.stars[n] || 0, locked = n > save.unlocked, isCur = n === cur;
     const node = document.createElement('div');
     node.className = 'node' + (locked ? ' locked' : '') + (isCur ? ' cur' : '');
     node.style.left = x + 'px'; node.style.top = y + 'px';
@@ -136,7 +197,7 @@ function buildMap() {
     node.querySelector('button').addEventListener('click', () => {
       audio.unlock();
       if (locked) { audio.sfx('bad'); return; }
-      audio.sfx('click'); openLevelStart(i);
+      audio.sfx('click'); openLevelStart(n - 1);
     });
     inner.appendChild(node);
     if (n % 3 === 0 && !save.rewarded[n]) {
@@ -146,21 +207,22 @@ function buildMap() {
       inner.appendChild(ch);
     }
     if (isCur) curPos = { x, y };
-  });
+  }
   WORLDS.forEach((w, i) => {
+    const s = Math.floor(slotOf(w.from) / PER);
     const b = document.createElement('div');
     b.className = 'world-banner';
-    b.innerHTML = `<small>WORLD ${i + 1}</small><b>${w.name}</b>`;
-    b.style.top = ((nSec - i) * secH + (i === 0 ? 34 : 18)) + 'px';
+    b.innerHTML = w.from > LAST ? `<small>AFTER LEVEL ${LAST}</small><b>${w.name}</b>` : `<small>WORLD ${i + 1}</small><b>${w.name}</b>`;
+    b.style.top = (secTop(s) + secH + (i === 0 ? 34 : 18)) + 'px';
     inner.appendChild(b);
   });
-  if (LEVELS.length % MAP_PLATFORMS.length) {
-    const k = LEVELS.length % MAP_PLATFORMS.length, [px, py] = MAP_PLATFORMS[Math.min(MAP_PLATFORMS.length - 1, k + 2)];
-    const b = document.createElement('div');
-    b.className = 'world-banner';
-    b.innerHTML = '<small>MORE TO DIG</small><b>New levels soon</b>';
-    b.style.top = (py / 1536 * secH) + 'px'; b.style.left = (px / 864 * W) + 'px';
-    inner.appendChild(b);
+  if (LAST % PER && save.unlocked <= LAST) {
+    const [px, py] = MAP_PLATFORMS[Math.min(PER - 1, (LAST % PER) + 1)];
+    const gate = document.createElement('div');
+    gate.className = 'world-banner gate';
+    gate.innerHTML = `<img src="${A}ui-crown.png" alt=""><small>BEAT LEVEL ${LAST} TO OPEN</small><b>The Endless Dig</b>`;
+    gate.style.top = (secTop(Math.floor(LAST / PER)) + py / 1536 * secH) + 'px'; gate.style.left = (px / 864 * W) + 'px';
+    inner.appendChild(gate);
   }
   if (curPos) {
     const d = document.createElement('img');
@@ -170,7 +232,7 @@ function buildMap() {
     requestAnimationFrame(() => { $('mapScroll').scrollTop = curPos.y - $('mapScroll').clientHeight * 0.5; });
   }
   $('mapStars').textContent = totalStars();
-  const lv = LEVELS[cur - 1];
+  const lv = getLevel(cur);
   $('mapLevelName').textContent = `Level ${cur}`;
   $('mapLevelDesc').textContent = `${lv.goals.map((g) => goalText(lv, g)).join(' · ')}`;
   $('mapGoalIcon').src = goalIcon(lv.goals[0]);
@@ -180,14 +242,18 @@ $('mapHome').addEventListener('click', () => { audio.sfx('click'); openTitle(); 
 $('mapSettings').addEventListener('click', () => { audio.unlock(); audio.sfx('click'); openSettings(); });
 
 function openLevelStart(i) {
-  const lv = LEVELS[i], n = i + 1, best = save.best[n];
+  const n = i + 1, lv = getLevel(n), best = save.best[n];
+  syncLives();
+  const lifeLine = save.lives < MAX_LIVES ? `<div class="meta" style="font-size: 13px">Next life in <b class="lives-wait">${fmt(nextLifeMs())}</b></div>` : '';
   modal(`${closeX}
+    ${lv.endless ? `<img src="${A}ui-crown.png" alt="" style="width: 64px; margin-bottom: -6px">` : ''}
     <div class="sub">${worldOf(n).name.toUpperCase()}</div>
     <h2 class="gold-title">Level ${n}</h2>
     <div class="goals">${lv.goals.map((g) => `<div class="goal"><img src="${goalIcon(g)}" alt=""><span>${goalAmount(lv, g).toLocaleString()}</span></div>`).join('')}</div>
-    <div class="meta">${lv.goals.map((g) => goalText(lv, g)).join(' · ')}<br>in ${lv.moves} moves</div>
+    <div class="meta">${lv.goals.map((g) => goalText(lv, g)).join(' · ')}<br>in ${lv.moves} moves${lv.bombs ? ' · watch for fuse bombs!' : ''}</div>
     ${lv.tip ? `<div class="tip"><img src="${A}mascot-happy.png" alt="" style="width: 46px; flex-shrink: 0"><div><b>DIGBY'S TIP</b>${lv.tip}</div></div>` : ''}
     ${best ? `<div class="meta">Your best: ${best.toLocaleString()}</div>` : ''}
+    ${hearts()}${lifeLine}
     <div class="actions"><button class="btn btn-green" data-act="play" data-level="${i}" style="height: 64px; font-size: 30px">Play</button></div>`);
 }
 
@@ -215,10 +281,11 @@ function startLevel(i) {
   if (game) game.destroy();
   show('game');
   setHammer(false);
-  game = new Game(LEVELS[i], i, rd, hooks);
+  const lv = getLevel(i + 1);
+  game = new Game(lv, i, rd, hooks);
   rd.setGame(game);
   sizeBoard();
-  $('lvlLabel').textContent = `Level ${i + 1}`;
+  $('lvlLabel').innerHTML = lv.endless ? `<img src="${A}ui-crown.png" alt="" style="width: 26px; vertical-align: -5px; margin-right: 4px">Level ${i + 1}` : `Level ${i + 1}`;
   $('digby').src = A + 'mascot-happy.png';
   lastStars = 0;
   $('hudGoals').innerHTML = game.goals.map((g, k) => `<div class="goal" id="goal${k}"><img src="${goalIcon(g)}" alt=""><span></span><div class="check"></div></div>`).join('');
@@ -310,44 +377,50 @@ function onEnd(res) {
     const prev = save.stars[n] || 0;
     save.stars[n] = Math.max(prev, res.stars);
     save.best[n] = Math.max(save.best[n] || 0, res.score);
-    save.unlocked = Math.max(save.unlocked, Math.min(LEVELS.length, n + 1));
+    save.unlocked = Math.max(save.unlocked, n + 1);
     let reward = '';
     if (n % 3 === 0 && !save.rewarded[n]) { save.rewarded[n] = true; save.boosters.hammer++; save.boosters.shuffle++; reward = '+1 Hammer and +1 Shuffle'; }
     persist();
     audio.sfx('win');
     endTimer = setTimeout(() => showWin(res, reward), 700);
   } else {
+    loseLife();
     $('digby').src = A + 'mascot-oops.png';
     audio.sfx('fail');
-    endTimer = setTimeout(showFail, 600);
+    endTimer = setTimeout(() => showFail(res), 600);
   }
 }
 function showWin(res, reward) {
-  const n = current + 1, last = n >= LEVELS.length;
-  modal(`<img class="mascot" src="${A}mascot-happy.png" alt="Digby cheering">
+  const n = current + 1, opened = n === LAST;
+  modal(`<img class="mascot" src="${A}${opened ? 'ui-crown.png' : 'mascot-happy.png'}" alt="">
     <div class="sub">LEVEL ${n}</div>
-    <h2 class="gold-title">${last ? 'You did it!' : 'Complete!'}</h2>
+    <h2 class="gold-title">${opened ? 'Mountain conquered!' : 'Complete!'}</h2>
     <div class="stars" role="img" aria-label="${res.stars} of 3 stars"><img src="${A}ui-star.png" alt="" id="ws0"><img src="${A}ui-star.png" class="mid" alt="" id="ws1"><img src="${A}ui-star.png" alt="" id="ws2"></div>
     <div class="scorebox"><div style="text-align: left"><div class="sub">SCORE</div><div class="v">${res.score.toLocaleString()}</div></div><div style="text-align: right"><div class="sub">BEST</div><div class="v" style="font-size: 22px">${(save.best[n] || res.score).toLocaleString()}</div></div></div>
     ${reward ? `<div class="reward"><img src="${A}ui-chest.png" alt=""><div><div class="h-font" style="font-size: 19px; color: var(--gold-2)">Treasure found!</div><div style="font-size: 13px; font-weight: 800">${reward}</div></div></div>` : ''}
-    ${last ? '<div class="meta">You cleared every level in Gemfall. More caverns are coming soon!</div>' : ''}
+    ${opened ? '<div class="meta">The Endless Dig is open: a brand-new level every time, getting slowly tougher.</div>' : ''}
     <div class="actions">
-      ${last ? '' : '<button class="btn btn-green" data-act="next" style="height: 62px; font-size: 28px">Next level</button>'}
+      <button class="btn btn-green" data-act="next" style="height: 62px; font-size: 28px">${opened ? 'Enter the Endless Dig' : 'Next level'}</button>
       <div class="row"><button class="btn btn-purple" data-act="restart">Replay</button><button class="btn btn-purple" data-act="map">Map</button></div>
     </div>`);
   for (let k = 0; k < res.stars; k++) setTimeout(() => { const s = $('ws' + k); if (s) { s.classList.add('on'); audio.sfx('star', k); } }, 350 + k * 380);
 }
-function showFail() {
-  const g = game;
+function showFail(res) {
+  const g = game, bomb = res.reason === 'bomb';
   const left = g.goals.filter((x) => (x.type === 'score' ? g.score < x.target : x.left > 0));
-  modal(`<img class="mascot" src="${A}mascot-oops.png" alt="Digby scratching his head">
+  const canRetry = save.lives > 0;
+  modal(`<img class="mascot" src="${A}${bomb ? 'ob-bomb.png' : 'mascot-oops.png'}" alt="">
     <div class="sub">LEVEL ${current + 1}</div>
-    <h2 class="gold-title">Out of moves</h2>
-    <div class="meta" style="margin-top: 8px">So close! Still to go:</div>
-    <div class="goals">${left.map((x) => `<div class="goal"><img src="${goalIcon(x)}" alt=""><span>${(x.type === 'score' ? x.target - g.score : x.left).toLocaleString()}</span></div>`).join('')}</div>
-    <div class="tip"><img src="${A}sp-streak.png" alt="" style="width: 50px; flex-shrink: 0"><div><b>TIP</b>Make special gems early and save them for the hard spots. Retrying is always free: no lives, no waiting.</div></div>
-    <div class="actions"><button class="btn btn-green" data-act="restart" style="height: 62px; font-size: 28px">Try again</button>
-    <button class="btn btn-purple" data-act="map">Back to map</button></div>`);
+    <h2 class="gold-title">${bomb ? 'Boom!' : 'Out of moves'}</h2>
+    <div class="meta" style="margin-top: 8px">${bomb ? 'A fuse bomb went off.' : 'So close!'} You lost a life.</div>
+    ${hearts()}
+    ${left.length ? `<div class="meta">Still to go:</div><div class="goals">${left.map((x) => `<div class="goal"><img src="${goalIcon(x)}" alt=""><span>${(x.type === 'score' ? x.target - g.score : x.left).toLocaleString()}</span></div>`).join('')}</div>` : ''}
+    <div class="tip"><img src="${A}${bomb ? 'ob-bomb.png' : 'sp-streak.png'}" alt="" style="width: 50px; flex-shrink: 0"><div><b>TIP</b>${bomb ? 'Bombs with 3 or fewer moves left glow red. Match those first.' : 'Make special gems early and save them for the hard spots.'}</div></div>
+    <div class="actions">
+      ${canRetry ? '<button class="btn btn-green" data-act="restart" style="height: 62px; font-size: 28px">Try again</button>'
+        : `<button class="btn btn-purple" data-waiting="1" data-act="close" data-after="play" data-level="${current}" style="height: 62px">Next life in <span class="lives-wait">${fmt(nextLifeMs())}</span></button>`}
+      <button class="btn btn-purple" data-act="map">Back to map</button>
+    </div>`);
 }
 
 // pause and sound
@@ -376,7 +449,7 @@ function setHammer(on) {
   $('game').classList.toggle('hammer', on);
   $('bHammer').classList.toggle('active', on);
   const tip = $('frame').querySelector('.hammer-tip');
-  if (on && !tip) { const t = document.createElement('div'); t.className = 'hammer-tip'; t.textContent = 'Tap a gem or stone to smash it'; $('frame').appendChild(t); }
+  if (on && !tip) { const t = document.createElement('div'); t.className = 'hammer-tip'; t.textContent = 'Tap a gem, stone, chain or crystal'; $('frame').appendChild(t); }
   if (!on && tip) tip.remove();
 }
 $('bHammer').addEventListener('click', () => {
@@ -405,7 +478,8 @@ cv.addEventListener('pointerdown', (e) => {
   if (!cell) return;
   if (hammerMode) {
     const k = game.cell(cell.r, cell.c);
-    if (game.busy || !k || !k.playable || (!k.piece && k.stone <= 0) || (k.piece && k.piece.kind === 'chest')) { audio.sfx('bad'); return; }
+    const target = k && k.playable && (k.stone > 0 || k.crystal > 0 || (k.piece && k.piece.kind !== 'chest'));
+    if (game.busy || !target) { audio.sfx('bad'); return; }
     save.boosters.hammer--; persist(); updateBoosters(); setHammer(false);
     game.hammer(cell.r, cell.c);
     return;
@@ -436,12 +510,16 @@ cv.addEventListener('pointercancel', () => { drag = null; });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('overlay').classList.contains('hidden')) closeModal(); });
 
 // debugging and automated tests
-window.__gemfall = { get game() { return game; }, startLevel, openMap, get save() { return save; }, get rd() { return rd; } };
+window.__gemfall = {
+  get game() { return game; }, startLevel, openMap, getLevel, get save() { return save; }, get rd() { return rd; },
+  setLives(n, agoMs = 0) { save.lives = n; save.livesAt = n >= MAX_LIVES ? 0 : Date.now() - agoMs; persist(); renderLives(); }
+};
 
 (async () => {
   await preload();
   rd = new Renderer(cv, IMG);
   iceIcon = rd.sprites.ice[1].toDataURL();
   $('loading').classList.add('hidden');
+  syncLives();
   openTitle();
 })();

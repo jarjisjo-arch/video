@@ -38,6 +38,11 @@
   .round:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--ink); }
   .chip { display: inline-flex; align-items: center; gap: 2px; padding: 3px 14px 3px 3px; border-radius: 999px; border: 2px solid var(--gold); background: linear-gradient(var(--panel-a), var(--panel-b)); box-shadow: 0 4px 0 var(--ink); font-family: 'Lilita One', sans-serif; font-size: 19px; }
   .chip img { width: 34px; height: 34px; margin: -4px 0; }
+  .chip.lives { gap: 4px; }
+  .chip.lives small { font-family: Nunito, sans-serif; font-weight: 900; font-size: 11px; color: var(--gold-2); min-width: 30px; }
+  .hearts { display: flex; justify-content: center; gap: 4px; margin: 10px 0 2px; }
+  .hearts img { width: 40px; height: 40px; filter: drop-shadow(0 3px 3px rgba(0,0,0,0.5)); }
+  .hearts img.off { filter: grayscale(1) brightness(0.45); }
   .gold-title { font-family: 'Lilita One', sans-serif; color: #ffe45c; -webkit-text-stroke: 1.5px #6a2a00; text-shadow: 0 2px 0 #e08a00, 0 4px 0 #a85e00, 0 6px 0 #6a3a00, 0 9px 10px rgba(0,0,0,0.4); }
 
   /* loading */
@@ -84,6 +89,10 @@
   .world-banner { position: absolute; left: 50%; transform: translate(-50%, -50%); padding: 8px 22px 10px; border-radius: 18px; border: 3px solid var(--gold); background: linear-gradient(#8a5bff, #3a1c80); box-shadow: 0 6px 0 var(--ink), 0 10px 20px rgba(0,0,0,0.5); text-align: center; white-space: nowrap; pointer-events: none; }
   .world-banner small { display: block; font-size: 10px; font-weight: 900; letter-spacing: 0.16em; color: var(--gold-2); }
   .world-banner b { font-family: 'Lilita One', sans-serif; font-weight: 400; font-size: 22px; }
+  .world-banner.gate { padding-top: 30px; background: linear-gradient(#ffcf5a, #c98a12); border-color: #fff; }
+  .world-banner.gate img { position: absolute; left: 50%; top: -30px; width: 56px; transform: translateX(-50%); }
+  .world-banner.gate small { color: #4a2a00; }
+  .world-banner.gate b { color: #fff; text-shadow: 0 2px 0 #8a4a04; }
   #map .topbar { position: absolute; left: 0; right: 0; top: 0; padding: 12px 14px 26px; display: flex; align-items: center; gap: 10px; background: linear-gradient(rgba(20,10,50,0.9), rgba(20,10,50,0)); pointer-events: none; }
   #map .topbar > * { pointer-events: auto; }
   #map .bottom { position: absolute; left: 0; right: 0; bottom: 0; padding: 12px 14px calc(14px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 12px; background: linear-gradient(#4a2e9e, #24145c); border-top: 3px solid var(--gold); box-shadow: 0 -8px 20px rgba(0,0,0,0.45); }
@@ -185,6 +194,7 @@
     <div class="wrap">
       <div class="top">
         <span class="chip"><img src="assets/ui-star.png" alt=""><span id="titleStars">0</span></span>
+        <span class="chip lives" style="margin-right: auto; margin-left: 8px"><img src="assets/ui-heart.png" alt="Lives"><span class="lives-count">3</span><small class="lives-time">Full</small></span>
         <button class="round" id="titleSettings" aria-label="Settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h9M19 6h1M4 12h3M13 12h7M4 18h11M20 18h0"></path><circle cx="16" cy="6" r="2.4"></circle><circle cx="10" cy="12" r="2.4"></circle><circle cx="17.5" cy="18" r="2.4"></circle></svg></button>
       </div>
       <img class="logo" src="assets/logo.png" alt="Gemfall">
@@ -198,7 +208,7 @@
         <img class="chest" src="assets/ui-chest.png" alt="">
       </div>
       <button class="btn btn-green play" id="playBtn">PLAY</button>
-      <div class="sub">No lives. No waiting. Just puzzles.</div>
+      <div class="sub">60 levels, then the Endless Dig</div>
     </div>
   </section>
 
@@ -206,7 +216,8 @@
     <div class="scroll" id="mapScroll"><div class="inner" id="mapInner"></div></div>
     <div class="topbar">
       <button class="round" id="mapHome" aria-label="Back to title"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></button>
-      <span class="chip" style="margin-left: auto"><img src="assets/ui-star.png" alt=""><span id="mapStars">0</span></span>
+      <span class="chip lives" style="margin-left: auto"><img src="assets/ui-heart.png" alt="Lives"><span class="lives-count">3</span><small class="lives-time">Full</small></span>
+      <span class="chip"><img src="assets/ui-star.png" alt=""><span id="mapStars">0</span></span>
       <button class="round" id="mapSettings" aria-label="Settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h9M19 6h1M4 12h3M13 12h7M4 18h11M20 18h0"></path><circle cx="16" cy="6" r="2.4"></circle><circle cx="10" cy="12" r="2.4"></circle><circle cx="17.5" cy="18" r="2.4"></circle></svg></button>
     </div>
     <div class="bottom">

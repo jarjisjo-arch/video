@@ -168,6 +168,20 @@ export class Renderer {
       this.parts.push({ k: 'shard', x: p.x, y: p.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - cs * 2, g: cs * 20, life: 0, max: 0.5 + Math.random() * 0.3, s: cs * (0.06 + Math.random() * 0.07), col: i % 2 ? '#c9f2ff' : '#ffffff', rot: Math.random() * 6, vr: (Math.random() - 0.5) * 12 });
     }
   }
+  chainBreak(r, c) {
+    const p = this.center(r, c), cs = this.cell;
+    for (let i = 0; i < 10; i++) {
+      const a = Math.random() * Math.PI * 2, sp = cs * (2 + Math.random() * 4);
+      this.parts.push({ k: 'shard', x: p.x, y: p.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - cs * 2, g: cs * 24, life: 0, max: 0.5 + Math.random() * 0.4, s: cs * (0.07 + Math.random() * 0.07), col: i % 3 ? '#5c5f6b' : '#e8b84a', rot: Math.random() * 6, vr: (Math.random() - 0.5) * 14 });
+    }
+  }
+  crystalShards(r, c) {
+    const p = this.center(r, c), cs = this.cell;
+    for (let i = 0; i < 12; i++) {
+      const a = Math.random() * Math.PI * 2, sp = cs * (2 + Math.random() * 4);
+      this.parts.push({ k: 'shard', x: p.x, y: p.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - cs * 2, g: cs * 22, life: 0, max: 0.5 + Math.random() * 0.4, s: cs * (0.07 + Math.random() * 0.09), col: i % 2 ? '#c03cd8' : '#ff9cf2', rot: Math.random() * 6, vr: (Math.random() - 0.5) * 14 });
+    }
+  }
   text(x, y, str, size, color = '#fff', dur = 900) { this.texts.push({ x, y, str, size, color, t0: this.now, dur }); }
   scoreText(r, c, n) { const p = this.center(r, c); this.text(p.x, p.y, String(n), this.cell * 0.5, '#fff6b0'); }
 
@@ -223,7 +237,14 @@ export class Renderer {
     // stones
     for (let r = 0; r < this.R; r++) for (let c = 0; c < this.C; c++) {
       const cell = g.grid[r][c];
-      if (!cell.playable || cell.stone <= 0) continue;
+      if (!cell.playable) continue;
+      if (cell.crystal > 0) {
+        const x = this.ox + c * cs, y = this.oy + r * cs, k = cell.grow ?? 1;
+        const w = cs * 0.98 * k;
+        ctx.drawImage(this.img.crystal, x + (cs - w) / 2, y + (cs - w) / 2, w, w);
+        continue;
+      }
+      if (cell.stone <= 0) continue;
       const x = this.ox + c * cs, y = this.oy + r * cs, sh = cell.shake || 0;
       const jx = sh ? (Math.random() - 0.5) * sh * cs * 0.2 : 0;
       ctx.drawImage(this.img.stone, x + cs * 0.02 + jx, y + cs * 0.02, cs * 0.96, cs * 0.96);
@@ -245,6 +266,14 @@ export class Renderer {
     }
     for (const p of g.ghosts) this.drawPiece(p, 1);
     ctx.restore();
+    for (let r = 0; r < this.R; r++) for (let c = 0; c < this.C; c++) {
+      const cell = g.grid[r][c];
+      if (!cell.playable || !cell.lock) continue;
+      const sh = cell.shake || 0, jx = sh ? (Math.random() - 0.5) * sh * cs * 0.25 : 0;
+      ctx.save(); ctx.globalAlpha = 0.95;
+      ctx.drawImage(this.img.chain, this.ox + c * cs + cs * 0.04 + jx, this.oy + r * cs + cs * 0.04, cs * 0.92, cs * 0.92);
+      ctx.restore();
+    }
     // chest exits under the bottom row of each column
     if (g.chestGoal > 0) {
       const bob = Math.sin(t / 220) * cs * 0.04;
@@ -327,6 +356,16 @@ export class Renderer {
     ctx.drawImage(spr, -s / 2, -s / 2, s, s);
     if (p.flash > 0.01) { ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = p.alpha * p.flash; ctx.drawImage(spr, -s / 2, -s / 2, s, s); }
     ctx.restore();
+    if (p.fuse > 0 && p.alpha > 0.3) {
+      const b = cs * 0.56 * p.scale, bx = x + cs * 0.2, by = y + cs * 0.16;
+      const danger = p.fuse <= 3, pul = danger ? 1 + 0.12 * Math.sin(this.now / 90) : 1;
+      ctx.save(); ctx.globalAlpha = p.alpha;
+      ctx.drawImage(this.img.bomb, bx - b * pul / 2, by - b * pul / 2, b * pul, b * pul);
+      ctx.font = `${cs * 0.32}px "Lilita One", sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = Math.max(2, cs * 0.07); ctx.strokeStyle = '#1a0a00'; ctx.lineJoin = 'round';
+      ctx.strokeText(String(p.fuse), bx, by + b * 0.1); ctx.fillStyle = danger ? '#ff6a5a' : '#ffffff'; ctx.fillText(String(p.fuse), bx, by + b * 0.1);
+      ctx.restore();
+    }
   }
   spriteFor(p) {
     switch (p.kind) {

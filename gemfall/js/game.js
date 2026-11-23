@@ -6,8 +6,10 @@ const isStreak = (k) => k === 'streakH' || k === 'streakV';
 const key = (r, c) => r * 32 + c;
 let nid = 1;
 function makePiece(color, kind = 'gem', r = 0, c = 0) {
-  return { id: nid++, color, kind, x: c, y: r, scale: 1, alpha: 1, rot: 0, flash: 0, primed: false };
+  return { id: nid++, color, kind, x: c, y: r, scale: 1, alpha: 1, rot: 0, flash: 0, primed: false, fuse: 0 };
 }
+const blocker = (cell) => cell.stone > 0 || cell.crystal > 0;
+const wall = (cell) => cell.stone > 0 || cell.crystal > 0 || cell.lock > 0;
 
 export class Game {
   constructor(level, index, renderer, hooks) {
@@ -16,16 +18,24 @@ export class Game {
     this.colors = level.colors; this.moves = level.moves; this.score = 0;
     this.busy = false; this.ended = false; this.cascade = 0; this.ghosts = [];
     this.hintTimer = null; this.chestsSpawned = 0; this.sinceChest = 0;
-    let ice = 0, stone = 0;
+    this.crystalBroken = false; this.movesAtGoal = null; this.failReason = '';
+    const counts = { ice: 0, stone: 0, lock: 0, crystal: 0 };
+    this.bombCells = [];
     this.grid = level.layout.map((row, r) => row.split('').map((ch, c) => {
-      const cell = { r, c, playable: ch !== '_', ice: ch === 'i' ? 1 : ch === 'I' ? 2 : 0, stone: ch === 's' ? 1 : ch === 'S' ? 2 : 0, piece: null, shake: 0 };
-      ice += cell.ice; stone += cell.stone;
+      const cell = {
+        r, c, playable: ch !== '_', piece: null, shake: 0, grow: 1, lockA: 1,
+        ice: 'ik'.includes(ch) ? 1 : ch === 'I' ? 2 : 0,
+        stone: ch === 's' ? 1 : ch === 'S' ? 2 : 0,
+        lock: 'lk'.includes(ch) ? 1 : 0,
+        crystal: ch === 'c' ? 1 : 0
+      };
+      if (ch === 'b') this.bombCells.push(cell);
+      for (const k in counts) counts[k] += cell[k];
       return cell;
     }));
     this.goals = level.goals.map((g) => {
       const o = Object.assign({}, g);
-      if (g.type === 'ice') o.target = ice;
-      if (g.type === 'stone') o.target = stone;
+      if (g.type in counts) o.target = counts[g.type];
       o.left = o.target;
       return o;
     });
@@ -50,12 +60,13 @@ export class Game {
     for (let attempt = 0; attempt < 100; attempt++) {
       for (let r = 0; r < this.R; r++) for (let c = 0; c < this.C; c++) {
         const cell = this.grid[r][c];
-        cell.piece = cell.playable && cell.stone === 0 ? makePiece(this.pickSafeColor(r, c), 'gem', r, c) : null;
+        cell.piece = cell.playable && !blocker(cell) ? makePiece(this.pickSafeColor(r, c), 'gem', r, c) : null;
       }
+      this.bombCells.forEach((cell) => { if (cell.piece) cell.piece.fuse = (this.L.bombs && this.L.bombs.fuse) || 12; });
       if (this.chestGoal > 0) {
         // the first chest starts a third of the way down so new players see it travel quickly
         const spots = [];
-        for (let r = 2; r <= Math.min(4, this.R - 2); r++) for (let c = 1; c < this.C - 1; c++) { const cell = this.grid[r][c]; if (cell.playable && cell.piece) spots.push(cell); }
+        for (let r = 2; r <= Math.min(4, this.R - 2); r++) for (let c = 1; c < this.C - 1; c++) { const cell = this.grid[r][c]; if (cell.playable && cell.piece && !cell.lock) spots.push(cell); }
         if (spots.length) { const t = spots[Math.floor(Math.random() * spots.length)]; t.piece = makePiece(-1, 'chest', t.r, t.c); this.chestsSpawned = 1; }
       }
       if (!this.findMatches().length && this.findMove()) return;
@@ -121,15 +132,17 @@ export class Game {
     return null;
   }
   pickCreate(g, swapCells, kind) {
-    if (swapCells) for (const s of swapCells) if (g.cells.some((x) => x.r === s.r && x.c === s.c)) return s;
+    const ok = (cl) => !this.grid[cl.r][cl.c].lock;
+    if (swapCells) for (const s of swapCells) if (ok(s) && g.cells.some((x) => x.r === s.r && x.c === s.c)) return s;
     if (kind === 'burst') {
       const inH = new Set(), inV = new Set();
       g.runs.forEach((run) => run.cells.forEach((cl) => (run.dir === 'h' ? inH : inV).add(key(cl.r, cl.c))));
-      const x = g.cells.find((cl) => inH.has(key(cl.r, cl.c)) && inV.has(key(cl.r, cl.c)));
+      const x = g.cells.find((cl) => ok(cl) && inH.has(key(cl.r, cl.c)) && inV.has(key(cl.r, cl.c)));
       if (x) return x;
     }
     const run = g.runs.reduce((a, b) => (b.cells.length > a.cells.length ? b : a));
-    return run.cells[Math.floor((run.cells.length - 1) / 2)];
+    const mid = run.cells[Math.floor((run.cells.length - 1) / 2)];
+    return ok(mid) ? mid : (g.cells.find(ok) || null);
   }
   matchAt(r, c) {
     const col = this.colorAt(r, c);
@@ -146,7 +159,7 @@ export class Game {
   findMove() {
     for (let r = 0; r < this.R; r++) for (let c = 0; c < this.C; c++) for (const [dr, dc] of [[0, 1], [1, 0]]) {
       const A = this.cell(r, c), B = this.cell(r + dr, c + dc);
-      if (!A || !B || !A.piece || !B.piece) continue;
+      if (!A || !B || !A.piece || !B.piece || A.lock || B.lock) continue;
       const pa = A.piece, pb = B.piece;
       if ((pa.kind === 'prism' && pb.kind !== 'chest') || (pb.kind === 'prism' && pa.kind !== 'chest')) return [pa, pb];
       if (SPECIAL.has(pa.kind) && SPECIAL.has(pb.kind)) return [pa, pb];
@@ -176,6 +189,7 @@ export class Game {
     return hit;
   }
   goalsDone() { return this.goals.every((g) => (g.type === 'score' ? this.score >= g.target : g.left <= 0)); }
+  crystalCount() { let n = 0; for (const row of this.grid) for (const cl of row) n += cl.crystal; return n; }
   starsEarned() { return this.L.stars.filter((s) => this.score >= s).length; }
 
   // ---------- turn flow ----------
@@ -184,7 +198,14 @@ export class Game {
     if (Math.abs(a.r - b.r) + Math.abs(a.c - b.c) !== 1) return;
     const ca = this.cell(a.r, a.c), cb = this.cell(b.r, b.c);
     if (!ca || !cb || !ca.piece || !cb.piece) return;
+    if (ca.lock || cb.lock) {
+      sfx('bad');
+      const lk = ca.lock ? ca : cb;
+      lk.shake = 1; this.rd.tween(lk, { shake: 0 }, 300);
+      return;
+    }
     this.busy = true; this.clearHint();
+    this.crystalBroken = false;
     const pa = ca.piece, pb = cb.piece;
     sfx('swap');
     await Promise.all([this.rd.tween(pa, { x: b.c, y: b.r }, 150, 'inOutQuad'), this.rd.tween(pb, { x: a.c, y: a.r }, 150, 'inOutQuad')]);
@@ -229,8 +250,9 @@ export class Game {
   async matchStep(groups, swapCells, triggers) {
     const clear = new Map(), creations = [], stoneHits = new Set();
     for (const g of groups) {
-      const kind = this.groupSpecial(g);
+      let kind = this.groupSpecial(g);
       const at = kind ? this.pickCreate(g, swapCells, kind) : null;
+      if (!at) kind = null;
       for (const cl of g.cells) {
         const isAt = at && cl.r === at.r && cl.c === at.c;
         if (isAt) {
@@ -239,7 +261,7 @@ export class Game {
         } else clear.set(key(cl.r, cl.c), cl);
         for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
           const n = this.cell(cl.r + dr, cl.c + dc);
-          if (n && n.playable && n.stone > 0) stoneHits.add(key(n.r, n.c));
+          if (n && n.playable && blocker(n)) stoneHits.add(key(n.r, n.c));
         }
       }
       if (kind) creations.push({ r: at.r, c: at.c, kind, color: g.color, from: g.cells.filter((x) => !(x.r === at.r && x.c === at.c)) });
@@ -308,15 +330,22 @@ export class Game {
     const slides = [];
     for (const cr of o.creations || []) for (const f of cr.from) {
       const p = this.pieceAt(f.r, f.c);
-      if (p && p.kind === 'gem' && ex.clear.has(key(f.r, f.c))) { p.absorbed = true; slides.push(this.rd.tween(p, { x: cr.c, y: cr.r, scale: 0.7 }, 130, 'inQuad')); }
+      if (p && p.kind === 'gem' && !this.grid[f.r][f.c].lock && ex.clear.has(key(f.r, f.c))) { p.absorbed = true; slides.push(this.rd.tween(p, { x: cr.c, y: cr.r, scale: 0.7 }, 130, 'inQuad')); }
     }
     if (slides.length) await Promise.all(slides);
 
     const mult = Math.max(1, this.cascade);
     let gained = 0, flies = 0, sumR = 0, sumC = 0, n = 0;
+    let locks = 0, defused = 0;
     for (const [k, cl] of ex.clear) {
       const cell = this.grid[cl.r][cl.c], p = cell.piece;
       if (!p || p.kind === 'chest' || ex.keepPrimed.has(p.id)) continue;
+      if (cell.lock > 0) {
+        cell.lock = 0; locks++; gained += 80; this.goalDec('lock', 1);
+        this.rd.chainBreak(cl.r, cl.c);
+        continue;
+      }
+      if (p.fuse > 0) { defused++; gained += 200; }
       cell.piece = null; this.ghosts.push(p);
       gained += (ex.blast.has(k) ? 30 : 20) * mult; sumR += cl.r; sumC += cl.c; n++;
       if (p.kind !== 'prism') {
@@ -333,17 +362,29 @@ export class Game {
       const cell = this.cellK(k);
       if (cell.playable && cell.ice > 0) { cell.ice--; ice++; gained += 60; this.goalDec('ice', 1); this.rd.iceShards(cell.r, cell.c); }
     }
-    // stones crack next to matches and inside blasts
+    // hammer on a chain that sits on an empty spot of the clear set
+    ex.hit.forEach((k) => {
+      const cell = this.cellK(k);
+      if (cell.lock > 0 && !ex.clear.has(k)) { cell.lock = 0; locks++; gained += 80; this.goalDec('lock', 1); this.rd.chainBreak(cell.r, cell.c); }
+    });
+    // stones and crystal crack next to matches and inside blasts
     const stones = new Set(o.stoneHits || []);
-    ex.hit.forEach((k) => { if (this.cellK(k).stone > 0) stones.add(k); });
+    ex.hit.forEach((k) => { if (blocker(this.cellK(k))) stones.add(k); });
+    let crystals = 0;
     for (const k of stones) {
       const cell = this.cellK(k);
       if (cell.stone > 0) {
         cell.stone--; gained += 40; this.goalDec('stone', 1); this.rd.dust(cell.r, cell.c);
         cell.shake = 1; this.rd.tween(cell, { shake: 0 }, 260);
+      } else if (cell.crystal > 0) {
+        cell.crystal = 0; crystals++; gained += 80; this.goalDec('crystal', 1); this.crystalBroken = true;
+        this.rd.crystalShards(cell.r, cell.c);
       }
     }
     if (stones.size) sfx('stone');
+    if (crystals) sfx('crystal');
+    if (locks) sfx('chain');
+    if (defused) { sfx('defuse'); this.h.banner(defused > 1 ? 'Bombs defused!' : 'Defused!'); }
     if (ice) sfx('ice');
     if (o.matched) sfx('match', this.cascade - 1);
     this.score += gained;
@@ -399,7 +440,7 @@ export class Game {
         for (const t of targets) {
           const p = this.pieceAt(t.r, t.c);
           this.rd.bolt(prAt.r, prAt.c, t.r, t.c, col);
-          if (p.kind === 'gem') { p.kind = other.kind === 'burst' ? 'burst' : (Math.random() < 0.5 ? 'streakH' : 'streakV'); p.flash = 1; this.rd.tween(p, { flash: 0 }, 400); }
+          if (p.kind === 'gem' && !this.grid[t.r][t.c].lock) { p.kind = other.kind === 'burst' ? 'burst' : (Math.random() < 0.5 ? 'streakH' : 'streakV'); p.flash = 1; this.rd.tween(p, { flash: 0 }, 400); }
           clear.set(key(t.r, t.c), t);
           sfx('rush', targets.indexOf(t));
           await this.rd.wait(45);
@@ -440,7 +481,10 @@ export class Game {
         return makePiece(-1, 'chest');
       }
     }
-    return makePiece(this.randColor());
+    const p = makePiece(this.randColor());
+    const b = this.L.bombs;
+    if (b && Math.random() < b.rate && this.allPieces().filter((x) => x.p.fuse > 0).length < 3) p.fuse = b.fuse;
+    return p;
   }
   gravity() {
     const moves = [];
@@ -450,7 +494,7 @@ export class Game {
       for (let r = 0; r < this.R; r++) {
         const cell = this.grid[r][c];
         if (!cell.playable) continue;
-        if (cell.stone > 0) { if (cur.length) segs.push({ rows: cur, open }); cur = []; open = false; continue; }
+        if (wall(cell)) { if (cur.length) segs.push({ rows: cur, open }); cur = []; open = false; continue; }
         cur.push(r);
       }
       if (cur.length) segs.push({ rows: cur, open });
@@ -476,12 +520,12 @@ export class Game {
     if (moves.length) return moves;
     for (let r = this.R - 1; r >= 1; r--) for (let c = 0; c < this.C; c++) {
       const cell = this.grid[r][c];
-      if (!cell.playable || cell.stone > 0 || cell.piece) continue;
+      if (!cell.playable || wall(cell) || cell.piece) continue;
       for (const dc of [-1, 1]) {
         const src = this.cell(r - 1, c + dc);
-        if (!src || !src.playable || src.stone > 0 || !src.piece) continue;
+        if (!src || !src.playable || wall(src) || !src.piece) continue;
         const below = this.cell(r, c + dc);
-        if (below && below.playable && below.stone === 0 && !below.piece) continue;
+        if (below && below.playable && !wall(below) && !below.piece) continue;
         cell.piece = src.piece; src.piece = null; moves.push({ p: cell.piece, r, c });
         break;
       }
@@ -526,8 +570,9 @@ export class Game {
     if (this.busy || this.ended) return false;
     const cell = this.cell(r, c);
     if (!cell || !cell.playable || (cell.piece && cell.piece.kind === 'chest')) return false;
-    if (!cell.piece && cell.stone <= 0) return false;
+    if (!cell.piece && !blocker(cell)) return false;
     this.busy = true; this.clearHint();
+    this.crystalBroken = true;
     sfx('hammer'); this.rd.ring(r, c, 1.1, 1, 380); this.rd.shake(this.rd.cell * 0.2, 300);
     const clear = new Map();
     if (cell.piece) clear.set(key(r, c), { r, c });
@@ -535,7 +580,7 @@ export class Game {
     await this.executeClear({ clear, extraHit: new Set([key(r, c)]) });
     await this.collapse();
     await this.resolve(null);
-    await this.afterTurn();
+    await this.afterTurn(false);
     return true;
   }
   async shuffleNow() {
@@ -543,11 +588,11 @@ export class Game {
     this.busy = true; this.clearHint();
     await this.shuffleBoard();
     await this.resolve(null);
-    await this.afterTurn();
+    await this.afterTurn(false);
     return true;
   }
   async shuffleBoard() {
-    const cells = this.allPieces().filter((x) => x.p.kind === 'gem').map((x) => this.grid[x.r][x.c]);
+    const cells = this.allPieces().filter((x) => x.p.kind === 'gem' && !this.grid[x.r][x.c].lock).map((x) => this.grid[x.r][x.c]);
     const pcs = cells.map((cl) => cl.piece);
     let ok = false;
     for (let tries = 0; tries < 300 && !ok; tries++) {
@@ -570,12 +615,61 @@ export class Game {
   }
   clearHint() { clearTimeout(this.hintTimer); this.rd.hint = null; }
 
-  async afterTurn() {
+  async afterTurn(playerMove = true) {
     this.hud();
-    if (this.goalsDone()) { await this.gemRush(); this.finish(true); return; }
-    if (this.moves <= 0) { this.finish(false); return; }
-    if (!this.findMove()) { await this.rd.wait(250); await this.shuffleBoard(); await this.resolve(null); }
+    if (this.goalsDone()) { this.movesAtGoal = this.moves; await this.gemRush(); this.finish(true); return; }
+    if (playerMove) {
+      if (!this.crystalBroken && this.crystalCount() > 0) await this.spreadCrystal();
+      this.crystalBroken = false;
+      const bombs = this.allPieces().filter((x) => x.p.fuse > 0);
+      bombs.forEach((x) => { x.p.fuse--; if (x.p.fuse <= 3) { x.p.flash = 0.8; this.rd.tween(x.p, { flash: 0 }, 300); } });
+      const boom = bombs.find((x) => x.p.fuse <= 0);
+      if (boom) {
+        sfx('burst'); this.rd.ring(boom.r, boom.c, 3, 0, 700); this.rd.flash = 1; this.rd.shake(this.rd.cell * 0.35, 700);
+        this.h.banner('Boom!');
+        await this.rd.wait(900);
+        this.failReason = 'bomb'; this.finish(false); return;
+      }
+    }
+    if (this.moves <= 0) { this.failReason = 'moves'; this.finish(false); return; }
+    for (let tries = 0; tries < 6 && !this.findMove(); tries++) {
+      await this.rd.wait(250);
+      if (tries < 2) await this.shuffleBoard();
+      else await this.clearTheWay();
+      await this.collapse();
+      await this.resolve(null);
+    }
     this.busy = false; this.armHint();
+  }
+  async spreadCrystal() {
+    const options = [];
+    for (const row of this.grid) for (const cl of row) {
+      if (!cl.crystal) continue;
+      for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const n = this.cell(cl.r + dr, cl.c + dc);
+        if (n && n.playable && !wall(n) && n.piece && n.piece.kind === 'gem' && !n.piece.fuse) options.push(n);
+      }
+    }
+    if (!options.length) return;
+    const n = options[Math.floor(Math.random() * options.length)];
+    const p = n.piece; n.piece = null; this.ghosts.push(p);
+    this.rd.tween(p, { scale: 0, alpha: 0 }, 260).then(() => { this.ghosts = this.ghosts.filter((q) => q !== p); });
+    n.crystal = 1; n.grow = 0; this.rd.tween(n, { grow: 1 }, 380, 'outBack');
+    for (const g of this.goals) if (g.type === 'crystal') g.left++;
+    sfx('creep'); this.hud();
+    await this.rd.wait(380);
+  }
+  async clearTheWay() {
+    // last resort when no move exists: Digby breaks the most central blocker for free
+    const list = [];
+    for (const row of this.grid) for (const cl of row) if (cl.playable && wall(cl)) list.push(cl);
+    if (!list.length) { await this.shuffleBoard(); return; }
+    list.sort((a, b) => Math.hypot(a.r - 3.5, a.c - 3.5) - Math.hypot(b.r - 3.5, b.c - 3.5));
+    const t = list[0];
+    this.h.banner('Digby digs!');
+    sfx('hammer'); this.rd.ring(t.r, t.c, 1.1, 1, 380);
+    this.cascade = 1;
+    await this.executeClear({ clear: new Map(), extraHit: new Set([key(t.r, t.c)]) });
   }
   async gemRush() {
     if (this.moves <= 0) return;
@@ -583,7 +677,7 @@ export class Game {
     await this.rd.wait(800);
     let n = 0;
     while (this.moves > 0) {
-      const gems = this.allPieces().filter((x) => x.p.kind === 'gem');
+      const gems = this.allPieces().filter((x) => x.p.kind === 'gem' && !this.grid[x.r][x.c].lock);
       if (!gems.length) break;
       const g = gems[Math.floor(Math.random() * gems.length)];
       g.p.kind = Math.random() < 0.5 ? 'streakH' : 'streakV'; g.p.flash = 1; this.rd.tween(g.p, { flash: 0 }, 400);
@@ -605,7 +699,7 @@ export class Game {
   finish(win) {
     this.ended = true; this.busy = false; this.clearHint();
     const stars = win ? Math.max(1, this.starsEarned()) : 0;
-    this.h.end({ win, score: this.score, stars });
+    this.h.end({ win, score: this.score, stars, reason: this.failReason });
   }
   destroy() { this.ended = true; this.clearHint(); }
 }

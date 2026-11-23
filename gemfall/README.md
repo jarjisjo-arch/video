@@ -1,6 +1,6 @@
 # Gemfall
 
-A match-3 puzzle game set in a glowing crystal mine. Swap gems, set off special gems, and dig down through 20 levels with Digby the mole miner.
+A match-3 puzzle game set in a glowing crystal mine. Swap gems, set off special gems, and dig down through 60 levels across 7 worlds with Digby the mole miner, then keep going in the never-ending Endless Dig.
 
 ## Play it
 
@@ -46,15 +46,20 @@ Swap two special gems together for a combo:
 - **Stone blocks**: take up a space. Match next to them or blast them to break them. Thick stones (gold frame) need two hits.
 - **Treasure chests**: bring them down to the bottom row, marked with gold arrows, to collect them.
 - **Collect**: break a set number of one gem color.
+- **Chains**: lock a gem in place so it can't be swapped or fall. Match the chained gem, or blast it, to snap the chain.
+- **Creeping crystal**: blocks a space like stone, but if you finish a move without breaking any crystal, it grows onto a gem next to it. Match beside it or blast it to clear it.
+- **Fuse bombs**: gems carrying a bomb with a countdown. The number drops by one after every move. Match or blast the gem before it reaches 0, or the level ends. Bombs glow red at 3 or less.
 
 ### Extras
 
 - **Gem Rush**: when you finish a level with moves left, each spare move becomes a Streak gem that fires for bonus points.
 - **Stars**: earn 1 to 3 stars per level depending on your score.
+- **The Endless Dig**: after level 60, every level is generated from its number, so level 75 is always the same board. Difficulty creeps up slowly, and every fifth level is a lighter one.
 - **Hints**: a possible move glows after a few seconds without a move, or tap Hint at any time.
 - **Auto-shuffle**: if no moves are left, the board reshuffles for free.
 - **Boosters**: Hammer smashes one gem or stone; Shuffle mixes the board. Clearing levels 3, 6, 9 and so on for the first time opens a treasure chest with one more of each.
-- **Fair play**: there are no lives, timers, purchases or paid continues. Retrying is always free.
+- **Lives**: you have 3 lives. Failing a level, or leaving one after making a move, costs a life; winning never does. One life refills every 20 minutes, up to 3, and the title and map screens show the countdown. There are no purchases of any kind.
+- **Stuck boards**: if no move is possible even after a shuffle, Digby breaks a blocker for free so a level can never jam.
 
 Progress, stars and settings are saved in the browser's local storage.
 
@@ -66,7 +71,7 @@ Progress, stars and settings are saved in the browser's local storage.
 | `js/main.js` | Screens, level map, HUD, pop-ups, input, boosters and saved progress |
 | `js/game.js` | Game rules: matching, special gems and combos, obstacles, gravity, goals, Gem Rush |
 | `js/render.js` | Canvas drawing, animations, particles, beams and explosions |
-| `js/levels.js` | The 20 level layouts, goals, move limits and star scores |
+| `js/levels.js` | The 60 level layouts, goals, move limits and star scores, plus the Endless Dig level generator |
 | `js/audio.js` | Sound effects and background music, generated in the browser with Web Audio |
 | `assets/` | Game art |
 
@@ -80,9 +85,14 @@ Add an entry to `LEVELS` in `js/levels.js`. Each board row is a string of 8 char
 | `_` | Hole (not part of the board) |
 | `i` / `I` | Gem on ice / thick ice |
 | `s` / `S` | Stone / thick stone |
+| `l` / `k` | Chained gem / chained gem on ice |
+| `c` | Creeping crystal |
+| `b` | Gem carrying a fuse bomb |
 
-Goal types are `score`, `ice`, `stone`, `chest` and `collect` (with a `color` from 0 to 5: ruby, topaz, emerald, sapphire, amethyst, pearl). Ice and stone goal counts are worked out from the layout.
+Goal types are `score`, `ice`, `stone`, `lock`, `crystal`, `chest` and `collect` (with a `color` from 0 to 5: ruby, topaz, emerald, sapphire, amethyst, pearl). Ice, stone, chain and crystal counts are worked out from the layout. Add `bombs: { rate, fuse }` to make fuse bombs drop in during play. Star scores are worked out from the move count unless you set `stars`.
+
+Move counts were tuned by having a bot play every level several times; most levels leave it only a few moves to spare.
 
 ## Art
 
-The gems, special gems, items, cave background, level map, Digby and the logo were generated with Figma's AI image generator for this project. The originals are in the "Gemfall game art" Figma file.
+The gems, special gems, items, obstacles, life and timer icons, cave background, level map, Digby and the logo were generated with Figma's AI image generator for this project. The originals are in the "Gemfall game art" Figma file.

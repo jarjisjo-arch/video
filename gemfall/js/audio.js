@@ -76,6 +76,11 @@ export function sfx(name, p = 0) {
     case 'shuffle': for (let i = 0; i < 6; i++) tone(400 + Math.random() * 600, t + i * 0.04, 0.06, 'triangle', 0.06); break;
     case 'hammer': noise(t, 0.2, 0.45, 600, 'lowpass'); tone(110, t, 0.2, 'sine', 0.35, 60); break;
     case 'rush': tone(1046 + p * 60, t, 0.12, 'triangle', 0.1); break;
+    case 'chain': noise(t, 0.12, 0.3, 3500, 'highpass'); tone(1400, t, 0.1, 'square', 0.04, 900); tone(900, t + 0.06, 0.12, 'square', 0.04, 600); break;
+    case 'crystal': [1568, 2093, 2637].forEach((f, i) => tone(f, t + i * 0.03, 0.18, 'sine', 0.07)); noise(t, 0.2, 0.18, 2500, 'bandpass'); break;
+    case 'creep': tone(220, t, 0.35, 'sawtooth', 0.05, 330); noise(t, 0.3, 0.1, 500, 'lowpass'); break;
+    case 'defuse': tone(988, t, 0.1, 'triangle', 0.1); tone(1318, t + 0.08, 0.2, 'triangle', 0.1); break;
+    case 'life': tone(392, t, 0.25, 'triangle', 0.1); tone(330, t + 0.18, 0.4, 'triangle', 0.1); break;
   }
 }
 
