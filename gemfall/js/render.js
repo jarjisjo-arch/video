@@ -7,6 +7,11 @@ export const EASE = {
   inQuad: (t) => t * t,
   inOutQuad: (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2),
   outCubic: (t) => 1 - Math.pow(1 - t, 3),
+  inCubic: (t) => t * t * t,
+  inOutCubic: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
+  inBack: (t) => { const c1 = 1.5; return (c1 + 1) * t * t * t - c1 * t * t; },
+  outSoftBack: (t) => { const c1 = 0.9, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); },
+  outSpring: (t) => 1 - Math.cos(t * Math.PI * 2.5) * Math.exp(-6 * t),
   outBack: (t) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); },
   outBounce: (t) => {
     const n1 = 7.5625, d1 = 2.75;
@@ -103,6 +108,7 @@ export class Renderer {
     this.game = null; this.tweens = []; this.parts = []; this.fx = []; this.texts = [];
     this.now = performance.now(); this.shakeAmp = 0; this.shakeEnd = 0; this.flash = 0;
     this.selected = null; this.hint = null; this.speed = 1;
+    this.calm = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
     this.sprites = buildSprites(img);
     const loop = (t) => { this.frame(t); requestAnimationFrame(loop); };
     requestAnimationFrame(loop);
@@ -137,7 +143,82 @@ export class Renderer {
     });
   }
   wait(ms) { return this.tween({ v: 0 }, { v: 1 }, ms, 'linear'); }
-  shake(amp, ms) { this.shakeAmp = Math.max(this.shakeAmp * (this.now < this.shakeEnd ? 1 : 0), amp); this.shakeEnd = this.now + ms; }
+  // ---------- piece motion ----------
+  // A swap: the moving gem lifts over the other along a smooth curve.
+  swap(pa, a, pb, b) {
+    const d = 200;
+    pa.x += pa.ox; pa.y += pa.oy; pa.ox = 0; pa.oy = 0;
+    return Promise.all([
+      this.tween(pa, { x: b.c, y: b.r }, d, 'inOutCubic'),
+      this.tween(pb, { x: a.c, y: a.r }, d, 'inOutCubic'),
+      this.tween(pa, { lift: 1 }, d / 2, 'outQuad').then(() => this.tween(pa, { lift: 0 }, d / 2, 'inQuad')),
+      this.tween(pb, { lift: -0.5 }, d / 2, 'outQuad').then(() => this.tween(pb, { lift: 0 }, d / 2, 'inQuad'))
+    ]);
+  }
+  // A swap that makes no match: the gems already crossed, so glide back and settle with a wobble.
+  bumpBack(pa, a, pb, b) {
+    return Promise.all([
+      this.tween(pa, { x: a.c, y: a.r }, 260, 'outSoftBack'),
+      this.tween(pb, { x: b.c, y: b.r }, 260, 'outSoftBack'),
+      this.tween(pb, { lift: 0.8 }, 130, 'outQuad').then(() => this.tween(pb, { lift: 0 }, 130, 'inQuad')),
+      this.wobble(pa), this.wobble(pb)
+    ]);
+  }
+  // A swap that makes no match, shown as a nudge part of the way and a spring home.
+  bump(pa, a, pb, b) {
+    pa.x += pa.ox; pa.y += pa.oy; pa.ox = 0; pa.oy = 0;
+    const mid = (p, from, to) => ({ x: from.c + (to.c - from.c) * 0.42, y: from.r + (to.r - from.r) * 0.42 });
+    return Promise.all([
+      this.tween(pa, mid(pa, a, b), 120, 'outQuad').then(() => this.tween(pa, { x: a.c, y: a.r }, 300, 'outSpring')),
+      this.tween(pb, mid(pb, b, a), 120, 'outQuad').then(() => this.tween(pb, { x: b.c, y: b.r }, 300, 'outSpring')),
+      this.tween(pa, { lift: 0.6 }, 120).then(() => this.tween(pa, { lift: 0 }, 220)),
+      this.wobble(pa), this.wobble(pb)
+    ]);
+  }
+  wobble(p) {
+    if (this.calm) return Promise.resolve();
+    return this.tween(p, { rot: 0.16 }, 70, 'outQuad').then(() => this.tween(p, { rot: -0.12 }, 90, 'inOutQuad'))
+      .then(() => this.tween(p, { rot: 0 }, 160, 'outQuad'));
+  }
+  // Gravity fall: speeds up as it drops, then squashes on landing and springs back.
+  fall(p, r, c, delay = 0) {
+    const dist = Math.max(0.01, Math.hypot(r - p.y, c - p.x));
+    const dur = 110 + 88 * Math.sqrt(dist);
+    const stretch = this.calm ? 0 : Math.min(0.12, 0.03 * dist);
+    this.tween(p, { sx: 1 - stretch * 0.5, sy: 1 + stretch }, dur * 0.5, 'inQuad', delay);
+    return this.tween(p, { x: c, y: r }, dur, 'inQuad', delay).then(() => {
+      if (!this.calm) {
+        const k = Math.min(1, dist / 3);
+        this.tween(p, { sx: 1 + 0.16 * k, sy: 1 - 0.2 * k }, 70, 'outQuad')
+          .then(() => this.tween(p, { sx: 1, sy: 1 }, 260, 'outSpring'));
+      } else { p.sx = 1; p.sy = 1; }
+    });
+  }
+  // A gem breaking: flash, swell, then spin away.
+  popOut(p, quick = false) {
+    if (quick) return this.tween(p, { scale: 0, alpha: 0 }, 130, 'inQuad');
+    p.flash = 1;
+    this.tween(p, { flash: 0 }, 200);
+    const spin = (Math.random() < 0.5 ? -1 : 1) * 0.7;
+    return this.tween(p, { scale: 1.22 }, 80, 'outQuad').then(() => this.tween(p, { scale: 0, alpha: 0, rot: spin }, 200, 'inBack'));
+  }
+  // Shuffle: gems swirl to the middle, then fan back out one after another.
+  async shuffle(cells) {
+    const cx = (this.C - 1) / 2, cy = (this.R - 1) / 2;
+    await Promise.all(cells.map((cl, i) => {
+      const p = cl.piece, a = Math.atan2(p.y - cy, p.x - cx) + 1.2;
+      return this.tween(p, { x: cx + Math.cos(a) * 0.6, y: cy + Math.sin(a) * 0.6, scale: 0.55, rot: 1.5 }, 300, 'inCubic', i * 4);
+    }));
+    await Promise.all(cells.map((cl) => {
+      const p = cl.piece, dist = Math.hypot(cl.c - cx, cl.r - cy);
+      return this.tween(p, { x: cl.c, y: cl.r, scale: 1, rot: 0 }, 420, 'outSoftBack', dist * 45);
+    }));
+  }
+  // Drag feedback: the gem follows the finger a little before the swap starts.
+  nudge(p, dx, dy) { p.ox = dx; p.oy = dy; }
+  release(p) { return this.tween(p, { ox: 0, oy: 0 }, 260, 'outSpring'); }
+
+  shake(amp, ms) { if (this.calm) return; this.shakeAmp = Math.max(this.shakeAmp * (this.now < this.shakeEnd ? 1 : 0), amp); this.shakeEnd = this.now + ms; }
 
   // ---------- effects ----------
   beam(dir, index, colorIdx) { this.fx.push({ type: 'beam', dir, index, color: GEM_COLORS[colorIdx] || '#fff', t0: this.now, dur: 480 }); }
@@ -209,6 +290,7 @@ export class Renderer {
   draw() {
     const ctx = this.ctx, d = this.dpr, g = this.game, cs = this.cell, t = this.now;
     ctx.setTransform(d, 0, 0, d, 0, 0);
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
     ctx.clearRect(0, 0, this.size, this.size);
     if (!g) return;
     if (t < this.shakeEnd) {
@@ -259,12 +341,19 @@ export class Renderer {
     // pieces (clipped to the board so spawning gems slide in from the top edge)
     ctx.save();
     ctx.beginPath(); ctx.rect(this.ox, this.oy, this.C * cs, this.R * cs); ctx.clip();
-    const hint = this.hint, pulse = 1 + 0.09 * Math.sin(t / 110);
+    const hint = this.hint, sel = this.selected;
+    const raised = [];
     for (let r = 0; r < this.R; r++) for (let c = 0; c < this.C; c++) {
       const p = g.grid[r][c].piece;
-      if (p) this.drawPiece(p, hint && (hint[0] === p || hint[1] === p) ? pulse : 1);
+      if (!p) continue;
+      let extra = 1, wob = 0;
+      if (hint && (hint[0] === p || hint[1] === p)) { extra = 1 + 0.05 * Math.sin(t / 160); wob = 0.09 * Math.sin(t / 120); }
+      if (sel && sel.r === r && sel.c === c) extra = 1.07 + 0.03 * Math.sin(t / 220);
+      if ((p.lift || 0) > 0.01 || p.ox || p.oy) raised.push([p, extra, wob]);
+      else this.drawPiece(p, extra, wob);
     }
-    for (const p of g.ghosts) this.drawPiece(p, 1);
+    for (const p of g.ghosts) this.drawPiece(p, 1, 0);
+    for (const [p, extra, wob] of raised) this.drawPiece(p, extra, wob);
     ctx.restore();
     for (let r = 0; r < this.R; r++) for (let c = 0; c < this.C; c++) {
       const cell = g.grid[r][c];
@@ -343,15 +432,23 @@ export class Renderer {
     if (this.flash > 0.01) { ctx.fillStyle = `rgba(255,250,230,${this.flash * 0.6})`; ctx.fillRect(0, 0, this.size, this.size); }
   }
 
-  drawPiece(p, extra) {
+  drawPiece(p, extra, wob = 0) {
     if (p.alpha <= 0.01 || p.scale <= 0.01) return;
-    const ctx = this.ctx, cs = this.cell;
-    const x = this.ox + (p.x + 0.5) * cs, y = this.oy + (p.y + 0.5) * cs;
-    const s = cs * 0.92 * p.scale * extra;
+    const ctx = this.ctx, cs = this.cell, lift = p.lift || 0;
+    const x = this.ox + (p.x + (p.ox || 0) + 0.5) * cs, y = this.oy + (p.y + (p.oy || 0) + 0.5) * cs;
+    const s = cs * 0.92 * p.scale * extra * (1 + 0.14 * lift);
+    const sx = p.sx ?? 1, sy = p.sy ?? 1;
     const spr = this.spriteFor(p);
-    ctx.save(); ctx.globalAlpha = p.alpha; ctx.translate(x, y);
-    if (p.rot) ctx.rotate(p.rot);
+    if (lift > 0.02) {
+      ctx.save(); ctx.globalAlpha = 0.28 * lift * p.alpha; ctx.fillStyle = '#05010f';
+      ctx.beginPath(); ctx.ellipse(x, y + s * 0.42, s * 0.36, s * 0.12, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    }
+    ctx.save(); ctx.globalAlpha = p.alpha;
+    // squash and stretch keep the bottom of the gem planted
+    ctx.translate(x, y - lift * cs * 0.12 + (s / 2) * (1 - sy));
+    if (p.rot || wob) ctx.rotate((p.rot || 0) + wob);
     if (p.kind === 'prism') ctx.rotate(this.now / 900);
+    ctx.scale(sx, sy);
     if (p.primed) { ctx.shadowColor = '#ffd66b'; ctx.shadowBlur = 20; }
     ctx.drawImage(spr, -s / 2, -s / 2, s, s);
     if (p.flash > 0.01) { ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = p.alpha * p.flash; ctx.drawImage(spr, -s / 2, -s / 2, s, s); }

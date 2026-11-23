@@ -287,13 +287,13 @@ function startLevel(i) {
   sizeBoard();
   $('lvlLabel').innerHTML = lv.endless ? `<img src="${A}ui-crown.png" alt="" style="width: 26px; vertical-align: -5px; margin-right: 4px">Level ${i + 1}` : `Level ${i + 1}`;
   $('digby').src = A + 'mascot-happy.png';
-  lastStars = 0;
+  lastStars = 0; shownScore = 0; scoreTarget = 0; lastMoves = lv.moves;
   $('hudGoals').innerHTML = game.goals.map((g, k) => `<div class="goal" id="goal${k}"><img src="${goalIcon(g)}" alt=""><span></span><div class="check"></div></div>`).join('');
   updateHUD(game); updateBoosters(); syncSoundBtn();
   game.busy = true;
   const all = game.allPieces();
   all.forEach(({ p, r }) => { p.y = r - game.R - 1; });
-  Promise.all(all.map(({ p, r, c }) => rd.tween(p, { y: r }, 520, 'outBounce', c * 28 + (game.R - r) * 22))).then(() => {
+  Promise.all(all.map(({ p, r, c }) => rd.fall(p, r, c, c * 30 + (game.R - r) * 26))).then(() => {
     if (game && !game.ended) { game.busy = false; game.armHint(); }
   });
   setTimeout(() => callout('Go!', true), 450);
@@ -309,10 +309,19 @@ window.addEventListener('resize', () => {
   if ($('map').classList.contains('active')) buildMap();
 });
 
+let shownScore = 0, scoreTarget = 0, scoreRaf = 0, lastMoves = 0;
+function stepScore() {
+  const d = scoreTarget - shownScore;
+  shownScore = Math.abs(d) < 3 ? scoreTarget : shownScore + d * 0.16;
+  $('hudScore').textContent = Math.round(shownScore).toLocaleString();
+  scoreRaf = shownScore === scoreTarget ? 0 : requestAnimationFrame(stepScore);
+}
 function updateHUD(g) {
   $('hudMoves').textContent = g.moves;
+  if (g.moves !== lastMoves) { const m = $('hudMoves'); m.classList.remove('tick'); void m.offsetWidth; m.classList.add('tick'); lastMoves = g.moves; }
   $('hudMovesBox').classList.toggle('low', g.moves <= 5 && !g.ended);
-  $('hudScore').textContent = g.score.toLocaleString();
+  scoreTarget = g.score;
+  if (!scoreRaf) scoreRaf = requestAnimationFrame(stepScore);
   const max = g.L.stars[2] * 1.06;
   $('hudBar').style.width = Math.min(100, g.score / max * 100) + '%';
   let st = 0;
@@ -491,22 +500,35 @@ cv.addEventListener('pointerdown', (e) => {
 cv.addEventListener('pointermove', (e) => {
   if (!drag || drag.moved || !game) return;
   const pt = local(e), dx = pt.x - drag.x, dy = pt.y - drag.y;
-  if (Math.max(Math.abs(dx), Math.abs(dy)) < rd.cell * 0.32) return;
+  const p = game.pieceAt(drag.cell.r, drag.cell.c);
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < rd.cell * 0.32) {
+    // the gem leans toward the finger before the swap starts
+    if (p && !game.cell(drag.cell.r, drag.cell.c).lock) {
+      const k = 0.55 / rd.cell;
+      if (Math.abs(dx) > Math.abs(dy)) rd.nudge(p, dx * k, 0); else rd.nudge(p, 0, dy * k);
+    }
+    return;
+  }
   drag.moved = true;
   const t = Math.abs(dx) > Math.abs(dy) ? { r: drag.cell.r, c: drag.cell.c + Math.sign(dx) } : { r: drag.cell.r + Math.sign(dy), c: drag.cell.c };
   sel = null; rd.selected = null;
-  game.trySwap(drag.cell, t);
+  Promise.resolve(game.trySwap(drag.cell, t)).then(() => { if (p && (p.ox || p.oy)) rd.release(p); });
 });
 cv.addEventListener('pointerup', () => {
   if (!drag || !game) { drag = null; return; }
   const d = drag; drag = null;
   if (d.moved) return;
+  const held = game.pieceAt(d.cell.r, d.cell.c);
+  if (held && (held.ox || held.oy)) rd.release(held);
   const c = d.cell;
   if (sel && Math.abs(sel.r - c.r) + Math.abs(sel.c - c.c) === 1) { const a = sel; sel = null; rd.selected = null; game.trySwap(a, c); return; }
   if (sel && sel.r === c.r && sel.c === c.c) { sel = null; rd.selected = null; return; }
   if (game.pieceAt(c.r, c.c)) { sel = c; rd.selected = c; audio.sfx('click'); }
 });
-cv.addEventListener('pointercancel', () => { drag = null; });
+cv.addEventListener('pointercancel', () => {
+  if (drag && game) { const held = game.pieceAt(drag.cell.r, drag.cell.c); if (held && (held.ox || held.oy)) rd.release(held); }
+  drag = null;
+});
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('overlay').classList.contains('hidden')) closeModal(); });
 
 // debugging and automated tests

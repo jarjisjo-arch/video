@@ -6,7 +6,7 @@ const isStreak = (k) => k === 'streakH' || k === 'streakV';
 const key = (r, c) => r * 32 + c;
 let nid = 1;
 function makePiece(color, kind = 'gem', r = 0, c = 0) {
-  return { id: nid++, color, kind, x: c, y: r, scale: 1, alpha: 1, rot: 0, flash: 0, primed: false, fuse: 0 };
+  return { id: nid++, color, kind, x: c, y: r, scale: 1, alpha: 1, rot: 0, flash: 0, primed: false, fuse: 0, sx: 1, sy: 1, lift: 0, ox: 0, oy: 0 };
 }
 const blocker = (cell) => cell.stone > 0 || cell.crystal > 0;
 const wall = (cell) => cell.stone > 0 || cell.crystal > 0 || cell.lock > 0;
@@ -207,17 +207,19 @@ export class Game {
     this.busy = true; this.clearHint();
     this.crystalBroken = false;
     const pa = ca.piece, pb = cb.piece;
-    sfx('swap');
-    await Promise.all([this.rd.tween(pa, { x: b.c, y: b.r }, 150, 'inOutQuad'), this.rd.tween(pb, { x: a.c, y: a.r }, 150, 'inOutQuad')]);
-    ca.piece = pb; cb.piece = pa;
     const combo = (pa.kind === 'prism' && pb.kind !== 'chest') || (pb.kind === 'prism' && pa.kind !== 'chest') || (SPECIAL.has(pa.kind) && SPECIAL.has(pb.kind));
-    if (!combo && !this.findMatches().length) {
+    ca.piece = pb; cb.piece = pa;
+    const matches = combo || this.findMatches().length > 0;
+    ca.piece = pa; cb.piece = pb;
+    if (!matches) {
       sfx('bad');
-      await Promise.all([this.rd.tween(pa, { x: a.c, y: a.r }, 160, 'inOutQuad'), this.rd.tween(pb, { x: b.c, y: b.r }, 160, 'inOutQuad')]);
-      ca.piece = pa; cb.piece = pb;
+      await this.rd.bump(pa, a, pb, b);
       this.busy = false; this.armHint();
       return;
     }
+    sfx('swap');
+    await this.rd.swap(pa, a, pb, b);
+    ca.piece = pb; cb.piece = pa;
     this.moves--; this.hud();
     if (combo) {
       this.cascade = 1;
@@ -353,8 +355,7 @@ export class Game {
         this.rd.pop(cl.r, cl.c, p.color, p.absorbed ? 3 : 9);
       } else this.rd.pop(cl.r, cl.c, 5, 14);
       const done = () => { this.ghosts = this.ghosts.filter((q) => q !== p); };
-      if (p.absorbed) this.rd.tween(p, { scale: 0, alpha: 0 }, 120).then(done);
-      else this.rd.tween(p, { scale: 1.25 }, 70).then(() => this.rd.tween(p, { scale: 0, alpha: 0 }, 170, 'inQuad')).then(done);
+      this.rd.popOut(p, p.absorbed).then(done);
     }
     // ice cracks under every cleared or blasted cell
     let ice = 0;
@@ -539,10 +540,8 @@ export class Game {
         if (await this.collectChests()) continue;
         break;
       }
-      await Promise.all(moves.map((m) => {
-        const dist = Math.hypot(m.p.y - m.r, m.p.x - m.c);
-        return this.rd.tween(m.p, { x: m.c, y: m.r }, 110 + 75 * Math.sqrt(dist), 'outBounce');
-      }));
+      // lower gems start a moment earlier, so each column ripples down instead of moving as a slab
+      await Promise.all(moves.map((m) => this.rd.fall(m.p, m.r, m.c, (this.R - 1 - m.r) * 11 + m.c * 4)));
     }
   }
   async collectChests() {
@@ -602,7 +601,7 @@ export class Game {
       ok = !this.findMatches().length && !!this.findMove();
     }
     this.h.banner('Shuffle!'); sfx('shuffle');
-    await Promise.all(cells.map((cl) => this.rd.tween(cl.piece, { x: cl.c, y: cl.r }, 480, 'inOutQuad')));
+    await this.rd.shuffle(cells);
   }
   armHint() {
     clearTimeout(this.hintTimer);
