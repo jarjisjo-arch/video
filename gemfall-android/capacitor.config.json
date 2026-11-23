@@ -1,0 +1,15 @@
+{
+  "appId": "com.gemfall.game",
+  "appName": "Gemfall",
+  "webDir": "www",
+  "backgroundColor": "#1a1233",
+  "android": {
+    "backgroundColor": "#1a1233"
+  },
+  "plugins": {
+    "SystemBars": {
+      "style": "DARK",
+      "initialViewportFitValueHint": "cover"
+    }
+  }
+}

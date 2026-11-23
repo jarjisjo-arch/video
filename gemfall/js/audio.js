@@ -38,13 +38,13 @@ function tone(freq, t, dur, type = 'sine', vol = 0.2, glide = null, bus = sfxBus
   o.start(t); o.stop(t + dur + 0.02);
 }
 
-function noise(t, dur, vol, freq, type = 'bandpass', sweep = null) {
+function noise(t, dur, vol, freq, type = 'bandpass', sweep = null, bus = sfxBus) {
   const s = ctx.createBufferSource(); s.buffer = noiseBuf;
   const f = ctx.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(freq, t); f.Q.value = 1.2;
   if (sweep) f.frequency.exponentialRampToValueAtTime(sweep, t + dur);
   const g = ctx.createGain();
   g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  s.connect(f); f.connect(g); g.connect(sfxBus);
+  s.connect(f); f.connect(g); g.connect(bus);
   s.start(t); s.stop(t + dur + 0.02);
 }
 
@@ -81,21 +81,53 @@ export function sfx(name, p = 0) {
     case 'creep': tone(220, t, 0.35, 'sawtooth', 0.05, 330); noise(t, 0.3, 0.1, 500, 'lowpass'); break;
     case 'defuse': tone(988, t, 0.1, 'triangle', 0.1); tone(1318, t + 0.08, 0.2, 'triangle', 0.1); break;
     case 'life': tone(392, t, 0.25, 'triangle', 0.1); tone(330, t + 0.18, 0.4, 'triangle', 0.1); break;
+    case 'gift': [659, 784, 988, 1318, 1568].forEach((f, i) => tone(f, t + i * 0.06, 0.3, 'triangle', 0.11)); noise(t + 0.3, 0.5, 0.12, 4000, 'highpass'); break;
+    case 'pop': tone(880, t, 0.08, 'sine', 0.14, 1320); break;
   }
 }
 
-// Gentle looping background tune (pentatonic bells over a soft bass).
-const MEL = [0, 2, 4, 7, 4, 2, 5, 4, 0, 2, 4, 9, 7, 4, 2, -1];
-const BASS = [130.81, 130.81, 110, 98];
+// ---------- music: small looping tunes, one per area ----------
+// Each track: tempo (ms per step), root (MIDI note), scale (semitones), melody (scale steps, -1 = rest),
+// bass (one scale step per bar of 4 steps), and the instruments used.
+const TRACKS = {
+  menu: { tempo: 340, root: 72, scale: [0, 2, 4, 7, 9], mel: [0, 1, 2, 3, 2, 1, 4, 2, 0, 1, 2, 6, 3, 2, 1, -1], bass: [0, 0, -2, -1], lead: 'sine', bassWave: 'triangle' },
+  caverns: { tempo: 320, root: 67, scale: [0, 2, 4, 7, 9], mel: [2, -1, 3, 4, 3, 2, 0, -1, 1, 2, 3, -1, 2, 1, 0, -1, 4, -1, 5, 4, 3, 2, 3, -1, 2, 1, 2, 3, 1, -1, 0, -1], bass: [0, -2, 3, -1, 0, -2, -1, 0], lead: 'triangle', bassWave: 'sine', bell: true },
+  glow: { tempo: 380, root: 69, scale: [0, 3, 5, 7, 10], mel: [0, 2, 4, 2, 5, 4, 2, -1, 1, 3, 4, 3, 2, 1, 0, -1], bass: [0, -2, -1, -3], lead: 'sine', bassWave: 'sine', echo: true },
+  forge: { tempo: 260, root: 62, scale: [0, 2, 3, 5, 7, 8, 10], mel: [0, -1, 0, 2, 4, -1, 3, 2, 0, -1, 0, 2, 5, 4, 3, -1, 4, -1, 4, 5, 7, 6, 5, 4, 3, 2, 3, 4, 2, -1, 0, -1], bass: [0, 0, -2, -3, 0, 0, -3, -2], lead: 'square', bassWave: 'triangle', perc: true, leadVol: 0.05 },
+  ruins: { tempo: 360, root: 65, scale: [0, 2, 4, 5, 7, 9, 11], mel: [4, -1, 2, 0, 1, -1, 2, 4, 5, 4, 2, -1, 3, 2, 1, -1], bass: [0, -3, -2, -4], lead: 'triangle', bassWave: 'sine', echo: true },
+  heart: { tempo: 300, root: 64, scale: [0, 2, 4, 5, 7, 9, 11], mel: [0, 2, 4, 7, 6, 4, 5, -1, 3, 5, 7, 9, 8, 7, 6, -1, 7, -1, 6, 5, 4, 5, 6, 4, 2, 4, 3, 1, 0, -1, 0, -1], bass: [0, -3, -2, -4, 0, -3, 1, 0], lead: 'triangle', bassWave: 'triangle', bell: true, perc: true },
+  endless: { tempo: 300, root: 62, scale: [0, 2, 3, 5, 7, 9, 10], mel: [0, 4, 7, 4, 2, 4, 6, 4, 1, 4, 7, 9, 8, 7, 4, -1], bass: [0, -1, -3, -2], lead: 'sine', bassWave: 'triangle', echo: true, perc: true }
+};
+const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+function noteOf(tr, deg, oct = 0) {
+  const n = tr.scale.length, o = Math.floor(deg / n), i = ((deg % n) + n) % n;
+  return hz(tr.root + tr.scale[i] + 12 * (o + oct));
+}
+let track = 'menu';
+export function setTrack(name) {
+  if (!TRACKS[name] || name === track) return;
+  track = name; step = 0;
+  if (musicTimer) { stopMusic(); startMusic(); }
+}
+function tick() {
+  if (!ctx || ctx.state !== 'running') return;
+  const tr = TRACKS[track], t = ctx.currentTime + 0.05, beat = tr.tempo / 1000;
+  const d = tr.mel[step % tr.mel.length];
+  if (d >= 0) {
+    const f = noteOf(tr, d, -1), v = tr.leadVol || 0.12;
+    tone(f, t, beat * 2.6, tr.lead, v, null, musicBus);
+    if (tr.bell) tone(f * 2, t, beat * 1.2, 'sine', v * 0.35, null, musicBus);
+    if (tr.echo) tone(f, t + beat * 1.5, beat * 2, 'sine', v * 0.35, null, musicBus);
+  }
+  if (step % 4 === 0) {
+    const b = tr.bass[(step / 4 | 0) % tr.bass.length];
+    tone(noteOf(tr, b, -2), t, beat * 4.6, tr.bassWave, 0.16, null, musicBus);
+  }
+  if (tr.perc && step % 2 === 1) noise(t, 0.05, 0.05, 6000, 'highpass', null, musicBus);
+  step++;
+}
 function startMusic() {
   if (!ctx || musicTimer) return;
-  musicTimer = setInterval(() => {
-    if (!ctx || ctx.state !== 'running') return;
-    const t = ctx.currentTime + 0.05;
-    const n = MEL[step % MEL.length];
-    if (n >= 0) tone(SCALE[n] / 2, t, 0.9, 'sine', 0.12, null, musicBus);
-    if (step % 4 === 0) tone(BASS[(step / 4 | 0) % BASS.length], t, 1.6, 'triangle', 0.16, null, musicBus);
-    step++;
-  }, 340);
+  musicTimer = setInterval(tick, TRACKS[track].tempo);
 }
 function stopMusic() { clearInterval(musicTimer); musicTimer = null; }

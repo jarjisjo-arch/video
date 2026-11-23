@@ -1,19 +1,26 @@
 // Gemfall app controller: screens, level map, lives, HUD, input, overlays, boosters and saved progress.
-import { LEVELS, WORLDS, MAP_PLATFORMS, getLevel, layoutCount } from './levels.js';
+import { LEVELS, WORLDS, mapFor, getLevel, layoutCount } from './levels.js';
 import { Renderer } from './render.js';
 import { Game } from './game.js';
 import * as audio from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 const A = 'assets/';
-const GEM_FILES = ['gem-ruby', 'gem-topaz', 'gem-emerald', 'gem-sapphire', 'gem-amethyst', 'gem-pearl'];
-const GEM_NAMES = ['rubies', 'topazes', 'emeralds', 'sapphires', 'amethysts', 'pearls'];
+// Board styles: same rules, different pieces and backdrop. Piece colours line up with the gem colours.
+const THEMES = {
+  gems: { name: 'Gem Mine', pieces: ['gem-ruby', 'gem-topaz', 'gem-emerald', 'gem-sapphire', 'gem-amethyst', 'gem-pearl'], names: ['rubies', 'topazes', 'emeralds', 'sapphires', 'amethysts', 'pearls'], bg: 'bg-cave.jpg' },
+  orchard: { name: 'Orchard Pop', pieces: ['fruit-0', 'fruit-1', 'fruit-2', 'fruit-3', 'fruit-4', 'fruit-5'], names: ['strawberries', 'oranges', 'apples', 'blueberries', 'grapes', 'coconuts'], bg: 'bg-orchard.jpg' },
+  orbit: { name: 'Orbit Swap', pieces: ['space-0', 'space-1', 'space-2', 'space-3', 'space-4', 'space-5'], names: ['red planets', 'stars', 'green planets', 'comets', 'galaxies', 'moons'], bg: 'bg-space.jpg' }
+};
 const MAX_LIVES = 3, LIFE_MS = 20 * 60 * 1000;
 const LAST = LEVELS.length;
 
 // ---------- saved progress (browser storage, optional) ----------
 const SAVE_KEY = 'gemfall-save-v1';
-function defaults() { return { unlocked: 1, stars: {}, best: {}, boosters: { hammer: 3, shuffle: 2 }, sfx: true, music: true, rewarded: {}, lives: MAX_LIVES, livesAt: 0 }; }
+function defaults() {
+  return { unlocked: 1, stars: {}, best: {}, boosters: { hammer: 3, shuffle: 2 }, sfx: true, music: true, rewarded: {}, lives: MAX_LIVES, livesAt: 0,
+    theme: 'gems', coached: {}, daily: { last: '', streak: 0 } };
+}
 function loadSave() {
   try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); return Object.assign(defaults(), s || {}); } catch (e) { return defaults(); }
 }
@@ -21,6 +28,8 @@ function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save));
 let save = loadSave();
 audio.setPrefs(save.sfx, save.music);
 const totalStars = () => Object.values(save.stars).reduce((a, b) => a + b, 0);
+const theme = () => THEMES[save.theme] || THEMES.gems;
+const pieceSrc = (color) => A + theme().pieces[color] + '.png';
 
 // ---------- lives: lose one on a failed or abandoned level, one refills every 20 minutes ----------
 function syncLives() {
@@ -58,13 +67,14 @@ setInterval(renderLives, 1000);
 const IMG = {};
 function loadImg(src) { return new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(i); i.src = src; }); }
 async function preload() {
-  const list = [...GEM_FILES.map((f) => A + f + '.png'), A + 'sp-prism.png', A + 'ui-chest.png', A + 'tile-stone.png', A + 'ui-star.png',
+  const list = [...theme().pieces.map((f) => A + f + '.png'), A + 'sp-prism.png', A + 'ui-chest.png', A + 'tile-stone.png', A + 'ui-star.png',
     A + 'ob-chain.png', A + 'ob-crystal.png', A + 'ob-bomb.png',
     A + 'map.jpg', A + 'bg-cave.jpg', A + 'logo.png', A + 'mascot-happy.png', A + 'mascot-oops.png', A + 'ui-heart.png', A + 'ui-hourglass.png', A + 'ui-crown.png'];
   let done = 0;
   const imgs = await Promise.all(list.map((s) => loadImg(s).then((i) => { done++; $('loadBar').style.width = (done / list.length * 100) + '%'; return i; })));
   IMG.gems = imgs.slice(0, 6); IMG.prism = imgs[6]; IMG.chest = imgs[7]; IMG.stone = imgs[8]; IMG.star = imgs[9];
   IMG.chain = imgs[10]; IMG.crystal = imgs[11]; IMG.bomb = imgs[12];
+  $('gameBg').src = A + theme().bg;
   try { await document.fonts.load('30px "Lilita One"'); } catch (e) { /* fallback font */ }
 }
 
@@ -76,13 +86,13 @@ function show(id) { document.querySelectorAll('.screen').forEach((s) => s.classL
 const COUNTED = ['ice', 'stone', 'lock', 'crystal'];
 function goalAmount(lv, g) { return COUNTED.includes(g.type) ? layoutCount(lv.layout, g.type) : g.target; }
 function goalIcon(g) {
-  return { score: A + 'ui-star.png', ice: iceIcon, stone: A + 'tile-stone.png', chest: A + 'ui-chest.png', lock: A + 'ob-chain.png', crystal: A + 'ob-crystal.png', collect: A + GEM_FILES[g.color] + '.png' }[g.type];
+  return { score: A + 'ui-star.png', ice: iceIcon, stone: A + 'tile-stone.png', chest: A + 'ui-chest.png', lock: A + 'ob-chain.png', crystal: A + 'ob-crystal.png', collect: pieceSrc(g.color) }[g.type];
 }
 function goalText(lv, g) {
   const n = goalAmount(lv, g);
   return {
     score: `Score ${n.toLocaleString()}`, ice: `Crack ${n} ice`, stone: `Break ${n} stone`, chest: `Collect ${n} chest${n > 1 ? 's' : ''}`,
-    lock: `Snap ${n} chain${n > 1 ? 's' : ''}`, crystal: `Clear all crystal`, collect: `Collect ${n} ${GEM_NAMES[g.color]}`
+    lock: `Snap ${n} chain${n > 1 ? 's' : ''}`, crystal: `Clear all crystal`, collect: `Collect ${n} ${theme().names[g.color]}`
   }[g.type];
 }
 function worldOf(n) { let w = WORLDS[0]; WORLDS.forEach((x) => { if (n >= x.from) w = x; }); return w; }
@@ -110,6 +120,11 @@ $('modal').addEventListener('click', (e) => {
   else if (act === 'next') tryPlay(current + 1);
   else if (act === 'quit-map') { loseLife(); game.destroy(); openMap(); }
   else if (act === 'quit-restart') { loseLife(); game.destroy(); tryPlay(current); }
+  else if (act === 'theme') {
+    document.querySelectorAll('.theme-card').forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
+    applyTheme(b.dataset.theme);
+  } else if (act === 'claim') claimDaily();
+  else if (act === 'coach-ok') clearCoach(true);
   else if (act === 'sfx' || act === 'music') {
     save[act] = !save[act]; persist(); audio.setPrefs(save.sfx, save.music);
     b.setAttribute('aria-pressed', String(save[act])); syncSoundBtn();
@@ -123,8 +138,21 @@ function toggles() {
   return `<div class="toggle">Sound effects <button data-act="sfx" aria-label="Sound effects" aria-pressed="${save.sfx}"></button></div>
           <div class="toggle">Music <button data-act="music" aria-label="Music" aria-pressed="${save.music}"></button></div>`;
 }
+function themePicker() {
+  return `<div class="sub" style="margin-top: 14px">BOARD STYLE</div><div class="themes">${Object.entries(THEMES).map(([id, t]) =>
+    `<button class="theme-card${save.theme === id ? ' on' : ''}" data-act="theme" data-theme="${id}" aria-pressed="${save.theme === id}">
+      <span class="tp">${[0, 2, 3].map((c) => `<img src="${A}${t.pieces[c]}.png" alt="">`).join('')}</span><span class="tn">${t.name}</span></button>`).join('')}</div>`;
+}
+async function applyTheme(id) {
+  if (!THEMES[id]) id = 'gems';
+  const imgs = await Promise.all(THEMES[id].pieces.map((f) => loadImg(A + f + '.png')));
+  save.theme = id; persist();
+  if (rd) rd.setGems(imgs); else IMG.gems = imgs;
+  $('gameBg').src = A + THEMES[id].bg;
+  if ($('map').classList.contains('active')) buildMap(false);
+}
 function openSettings() {
-  modal(`${closeX}<h2 class="gold-title" style="margin-top: 6px">Settings</h2>${toggles()}
+  modal(`${closeX}<h2 class="gold-title" style="margin-top: 6px">Settings</h2>${toggles()}${themePicker()}
     <div class="actions"><button class="btn btn-purple" data-act="close">Done</button>
     <button class="btn btn-orange" data-act="reset" style="font-size: 18px; height: 48px">Reset progress</button></div>`);
 }
@@ -149,24 +177,25 @@ function tryPlay(i) {
 }
 
 // ---------- title ----------
-function openTitle() { show('title'); $('titleStars').textContent = totalStars(); renderLives(); }
+function openTitle() { show('title'); $('titleStars').textContent = totalStars(); renderLives(); audio.setTrack('menu'); }
 $('playBtn').addEventListener('click', () => { audio.unlock(); audio.sfx('click'); openMap(); });
 $('titleSettings').addEventListener('click', () => { audio.unlock(); audio.sfx('click'); openSettings(); });
 
 // ---------- map ----------
-// Levels 1-60 use the first 60 platforms; the Endless Dig starts on a fresh map section.
-const PER = MAP_PLATFORMS.length;
+// Each world has its own painted map section with 9 platforms; the Endless Dig starts on a fresh section.
+const PER = 9;
 const ENDLESS_SLOT = Math.ceil(LAST / PER) * PER;
 const slotOf = (n) => (n <= LAST ? n - 1 : ENDLESS_SLOT + (n - LAST - 1));
-const MAP_FILTERS = ['none', 'hue-rotate(-28deg) saturate(1.1)', 'hue-rotate(40deg) saturate(1.15)', 'hue-rotate(-60deg) saturate(0.75) brightness(1.08)',
-  'hue-rotate(-95deg) saturate(1.3)', 'hue-rotate(75deg) saturate(1.1)', 'hue-rotate(140deg) saturate(1.2)', 'hue-rotate(200deg) saturate(1.1)'];
 function openMap() {
   clearTimeout(endTimer);
-  closeModal();
+  closeModal(); clearCoach();
   if (game) { game.destroy(); }
-  show('map'); buildMap(); renderLives();
+  show('map'); buildMap(); renderLives(); renderStreak();
+  audio.setTrack('menu');
+  if (!dailyState().claimed) setTimeout(() => { if ($('map').classList.contains('active') && $('overlay').classList.contains('hidden')) showDaily(); }, 550);
 }
-function buildMap() {
+function buildMap(scroll = true) {
+  const keepScroll = $('mapScroll').scrollTop;
   const inner = $('mapInner');
   inner.innerHTML = '';
   const shown = Math.max(LAST, save.unlocked + 4);
@@ -175,14 +204,19 @@ function buildMap() {
   const secTop = (s) => (nSec - 1 - s) * secH;
   for (let s = 0; s < nSec; s++) {
     const img = document.createElement('img');
-    img.className = 'sec'; img.src = A + 'map.jpg'; img.alt = '';
-    img.style.top = secTop(s) + 'px'; img.style.height = secH + 'px'; img.style.filter = MAP_FILTERS[s % MAP_FILTERS.length];
+    img.className = 'sec'; img.src = A + mapFor(s).img; img.alt = ''; img.loading = 'lazy'; img.decoding = 'async';
+    img.style.top = secTop(s) + 'px'; img.style.height = secH + 'px';
     inner.appendChild(img);
+    if (s > 0) {
+      const seam = document.createElement('div');
+      seam.className = 'seam'; seam.style.top = (secTop(s) + secH) + 'px';
+      inner.appendChild(seam);
+    }
   }
   const cur = save.unlocked;
   let curPos = null;
   for (let n = 1; n <= shown; n++) {
-    const slot = slotOf(n), s = Math.floor(slot / PER), [px, py] = MAP_PLATFORMS[slot % PER];
+    const slot = slotOf(n), s = Math.floor(slot / PER), [px, py] = mapFor(s).pts[slot % PER];
     const x = px / 864 * W, y = secTop(s) + py / 1536 * secH;
     const st = save.stars[n] || 0, locked = n > save.unlocked, isCur = n === cur;
     const node = document.createElement('div');
@@ -217,7 +251,7 @@ function buildMap() {
     inner.appendChild(b);
   });
   if (LAST % PER && save.unlocked <= LAST) {
-    const [px, py] = MAP_PLATFORMS[Math.min(PER - 1, (LAST % PER) + 1)];
+    const [px, py] = mapFor(Math.floor(LAST / PER)).pts[Math.min(PER - 1, (LAST % PER) + 1)];
     const gate = document.createElement('div');
     gate.className = 'world-banner gate';
     gate.innerHTML = `<img src="${A}ui-crown.png" alt=""><small>BEAT LEVEL ${LAST} TO OPEN</small><b>The Endless Dig</b>`;
@@ -229,7 +263,7 @@ function buildMap() {
     d.className = 'map-digby'; d.src = A + 'mascot-happy.png'; d.alt = '';
     d.style.left = (curPos.x + (curPos.x > W / 2 ? -66 : 66)) + 'px'; d.style.top = (curPos.y + 24) + 'px';
     inner.appendChild(d);
-    requestAnimationFrame(() => { $('mapScroll').scrollTop = curPos.y - $('mapScroll').clientHeight * 0.5; });
+    requestAnimationFrame(() => { $('mapScroll').scrollTop = scroll ? curPos.y - $('mapScroll').clientHeight * 0.5 : keepScroll; });
   }
   $('mapStars').textContent = totalStars();
   const lv = getLevel(cur);
@@ -269,7 +303,9 @@ const hooks = {
   special: () => cheer(),
   banner: (t) => callout(t, true),
   fly: (type, r, c, color) => flyToGoal(type, r, c, color),
-  end: (res) => onEnd(res)
+  moved: () => { if (coach && coach.kind === 'move') clearCoach(true); },
+  idle: () => coachCheck(),
+  end: (res) => { clearCoach(); onEnd(res); }
 };
 
 let lastStars = 0;
@@ -279,7 +315,9 @@ function startLevel(i) {
   audio.unlock();
   current = i;
   if (game) game.destroy();
+  clearCoach();
   show('game');
+  audio.setTrack(trackFor(i + 1));
   setHammer(false);
   const lv = getLevel(i + 1);
   game = new Game(lv, i, rd, hooks);
@@ -305,7 +343,7 @@ function sizeBoard() {
   rd.resize(Math.max(200, avail));
 }
 window.addEventListener('resize', () => {
-  if ($('game').classList.contains('active')) sizeBoard();
+  if ($('game').classList.contains('active')) { sizeBoard(); if (coach) { clearCoach(); if (game && !game.busy) coachCheck(); } }
   if ($('map').classList.contains('active')) buildMap();
 });
 
@@ -368,7 +406,7 @@ function flyToGoal(type, r, c, color) {
   const gr = el.getBoundingClientRect();
   const x1 = gr.left - appR.left + gr.width / 2 - 20, y1 = gr.top - appR.top + 18 - 20;
   const im = document.createElement('img');
-  im.src = type === 'chest' ? A + 'ui-chest.png' : A + GEM_FILES[color] + '.png'; im.alt = '';
+  im.src = type === 'chest' ? A + 'ui-chest.png' : pieceSrc(color); im.alt = '';
   $('fx').appendChild(im);
   const mx = (x0 + x1) / 2 + (Math.random() - 0.5) * 90, my = Math.min(y0, y1) - 30;
   const an = im.animate([
@@ -531,15 +569,148 @@ cv.addEventListener('pointercancel', () => {
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('overlay').classList.contains('hidden')) closeModal(); });
 
+// ---------- music per area ----------
+function trackFor(n) {
+  if (n > LAST) return 'endless';
+  return ['caverns', 'caverns', 'glow', 'glow', 'forge', 'ruins', 'heart'][WORLDS.indexOf(worldOf(n))] || 'caverns';
+}
+
+// ---------- tutorial coach: a pointing hand and Digby explain new ideas the first time ----------
+const COACH = {
+  1: { move: 'any', text: 'Swipe this gem to line up 3 of the same kind!' },
+  2: { move: 'streak', text: 'Line up 4 to make a Streak gem. It clears a whole line!' },
+  3: { spot: 'ice', text: 'See the ice? Make matches on top of it to crack it.' },
+  4: { move: 'burst', text: 'Match in an L or T shape to make a Burst gem!' },
+  5: { spot: 'stone', text: 'Stone breaks when you match right next to it.' },
+  6: { move: 'prism', text: 'Line up 5 to make a Prism. It clears a whole colour!' },
+  7: { spot: 'chest', text: 'Bring the chest down to the bottom row to collect it.' },
+  21: { spot: 'lock', text: 'Chained pieces can\'t move. Match them to snap the chain.' },
+  25: { spot: 'crystal', text: 'Crystal spreads every turn you don\'t break any. Match next to it!' },
+  30: { spot: 'bomb', text: 'Fuse bombs count down each move. Match them before they hit 0!' }
+};
+let coach = null;
+function findSpot(type) {
+  for (let r = game.R - 1; r >= 0; r--) for (let c = 0; c < game.C; c++) {
+    const k = game.cell(r, c);
+    if (!k || !k.playable) continue;
+    const p = k.piece;
+    if ((type === 'ice' && k.ice > 0) || (type === 'stone' && k.stone > 0) || (type === 'lock' && k.lock) || (type === 'crystal' && k.crystal > 0)
+      || (type === 'chest' && p && p.kind === 'chest') || (type === 'bomb' && p && p.fuse > 0)) return { r, c };
+  }
+  return null;
+}
+function coachCheck() {
+  const n = current + 1, c = COACH[n];
+  if (!game || game.ended || game.busy || !c || save.coached[n] || coach || !$('overlay').classList.contains('hidden')) return;
+  if (c.spot) { const at = findSpot(c.spot); if (at) showCoach('spot', [at], c.text); return; }
+  const m = c.move === 'any' ? game.findMove() : game.findMoveMaking(c.move);
+  if (!m) return;
+  const where = m.map((p) => game.allPieces().find((x) => x.p === p));
+  if (where.every(Boolean)) showCoach('move', where.map((x) => ({ r: x.r, c: x.c })), c.text);
+}
+function showCoach(kind, cells, text) {
+  const cvEl = $('board'), cs = rd.cell;
+  const pts = cells.map((x) => rd.center(x.r, x.c));
+  const x0 = Math.min(...pts.map((p) => p.x)) - cs / 2, x1 = Math.max(...pts.map((p) => p.x)) + cs / 2;
+  const y0 = Math.min(...pts.map((p) => p.y)) - cs / 2, y1 = Math.max(...pts.map((p) => p.y)) + cs / 2;
+  const el = document.createElement('div');
+  el.className = 'coach' + (kind === 'spot' ? ' blocking' : '');
+  Object.assign(el.style, { left: cvEl.offsetLeft + 'px', top: cvEl.offsetTop + 'px', width: rd.size + 'px', height: rd.size + 'px' });
+  const hs = cs * 1.45, tipX = 0.27 * hs, tipY = 0.07 * hs;
+  const a = pts[0], b = pts[pts.length - 1];
+  const low = (y0 + y1) / 2 > rd.size / 2;
+  const hx = x0 - 4, hy = y0 - 4, hw = x1 - x0 + 8, hh = y1 - y0 + 8, S = rd.size;
+  const dims = [[0, 0, S, hy], [0, hy + hh, S, S - hy - hh], [0, hy, hx, hh], [hx + hw, hy, S - hx - hw, hh]]
+    .map(([l, t, w, h]) => `<div class="dim" style="left: ${l}px; top: ${t}px; width: ${Math.max(0, w)}px; height: ${Math.max(0, h)}px"></div>`).join('');
+  el.innerHTML = `${dims}<div class="hole" style="left: ${hx}px; top: ${hy}px; width: ${hw}px; height: ${hh}px"></div>
+    <img class="hand ${kind}" src="${A}ui-hand.png" alt="" style="width: ${hs}px; --x0: ${a.x - tipX}px; --y0: ${a.y - tipY}px; --x1: ${b.x - tipX}px; --y1: ${b.y - tipY}px">
+    <div class="bubble" style="${low ? 'top' : 'bottom'}: 8px"><img src="${A}mascot-happy.png" alt=""><p></p>${kind === 'spot' ? '<button class="btn btn-green" data-act="coach-ok">Got it</button>' : ''}</div>`;
+  el.querySelector('p').textContent = text;
+  el.addEventListener('click', (e) => { const btn = e.target.closest('[data-act="coach-ok"]'); if (btn || kind === 'spot') { audio.sfx('click'); clearCoach(true); } });
+  $('frame').appendChild(el);
+  coach = { kind, el, n: current + 1 };
+  game.coaching = true; game.clearHint();
+  audio.sfx('pop');
+}
+function clearCoach(done = false) {
+  if (!coach) return;
+  const c = coach;
+  coach = null;
+  c.el.remove();
+  if (game) game.coaching = false;
+  if (done) {
+    // a level can hold an obstacle intro first and a move tip after it; mark it seen once its tip has shown
+    save.coached[c.n] = true; persist();
+    if (game && !game.busy && !game.ended) game.armHint();
+  }
+}
+
+// ---------- daily treasure: one reward per day, a 7-day cycle and a streak ----------
+const DAILY = [
+  { label: '1 Hammer', give: { hammer: 1 } },
+  { label: '1 Shuffle', give: { shuffle: 1 } },
+  { label: 'Full lives', give: { lives: true } },
+  { label: '2 Hammers', give: { hammer: 2 } },
+  { label: 'Hammer + Shuffle', give: { hammer: 1, shuffle: 1 } },
+  { label: '2 Shuffles', give: { shuffle: 2 } },
+  { label: 'Big chest', give: { hammer: 3, shuffle: 2, lives: true }, big: true }
+];
+const dayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function yesterdayKey() { const d = new Date(); d.setDate(d.getDate() - 1); return dayKey(d); }
+function dailyState() {
+  const d = save.daily || { last: '', streak: 0 };
+  if (d.last === dayKey()) return { claimed: true, streak: d.streak, day: (d.streak - 1) % 7 };
+  const streak = d.last === yesterdayKey() ? d.streak + 1 : 1;
+  return { claimed: false, streak, day: (streak - 1) % 7 };
+}
+function renderStreak() {
+  const st = dailyState(), d = save.daily || {};
+  const live = st.claimed ? st.streak : d.last === yesterdayKey() ? d.streak : 0;
+  $('streakNum').textContent = live;
+  $('mapDaily').classList.toggle('ready', !st.claimed);
+  $('mapDaily').setAttribute('aria-label', st.claimed ? `Daily treasure, ${live}-day streak` : 'Daily treasure ready to claim');
+}
+function showDaily() {
+  const st = dailyState();
+  const tiles = DAILY.map((r, i) => {
+    const got = i < st.day || (st.claimed && i === st.day);
+    return `<div class="day${got ? ' got' : ''}${!st.claimed && i === st.day ? ' today' : ''}${r.big ? ' big' : ''}">
+      <small>DAY ${i + 1}</small><img src="${A}${r.big ? 'ui-bigchest' : 'ui-gift'}.png" alt=""><span>${r.label}</span></div>`;
+  }).join('');
+  modal(`${closeX}<img src="${A}ui-calendar.png" alt="" class="cal-icon">
+    <h2 class="gold-title">Daily treasure</h2>
+    <div class="streak-line"><img src="${A}ui-flame.png" alt=""><span>${st.streak}-day streak</span></div>
+    <div class="days">${tiles}</div>
+    <div class="meta" style="font-size: 13px">Come back every day. Day 7 is the big chest! Miss a day and you start again from day 1.</div>
+    <div class="actions" id="dailyActions">${st.claimed ? '<button class="btn btn-purple" data-act="close">See you tomorrow!</button>' : '<button class="btn btn-green" data-act="claim" style="height: 62px; font-size: 28px">Claim</button>'}</div>`);
+}
+function claimDaily() {
+  const st = dailyState();
+  if (st.claimed) return;
+  const r = DAILY[st.day].give;
+  save.boosters.hammer += r.hammer || 0;
+  save.boosters.shuffle += r.shuffle || 0;
+  if (r.lives) { save.lives = MAX_LIVES; save.livesAt = 0; }
+  save.daily = { last: dayKey(), streak: st.streak };
+  persist(); renderLives(); renderStreak();
+  audio.sfx('gift');
+  const tile = document.querySelectorAll('#modal .day')[st.day];
+  if (tile) { tile.classList.remove('today'); tile.classList.add('got', 'pop'); }
+  $('dailyActions').innerHTML = `<div class="meta" style="color: var(--gold-2)">You got: ${DAILY[st.day].label}!</div><button class="btn btn-green" data-act="close">Great!</button>`;
+}
+$('mapDaily').addEventListener('click', () => { audio.unlock(); audio.sfx('click'); showDaily(); });
+
 // debugging and automated tests
 window.__gemfall = {
   get game() { return game; }, startLevel, openMap, getLevel, get save() { return save; }, get rd() { return rd; },
-  setLives(n, agoMs = 0) { save.lives = n; save.livesAt = n >= MAX_LIVES ? 0 : Date.now() - agoMs; persist(); renderLives(); }
+  setLives(n, agoMs = 0) { save.lives = n; save.livesAt = n >= MAX_LIVES ? 0 : Date.now() - agoMs; persist(); renderLives(); },
+  applyTheme, showDaily, claimDaily, clearCoach, get coach() { return coach; }
 };
 
 (async () => {
   await preload();
   rd = new Renderer(cv, IMG);
+  if (!THEMES[save.theme]) save.theme = 'gems';
   iceIcon = rd.sprites.ice[1].toDataURL();
   $('loading').classList.add('hidden');
   syncLives();

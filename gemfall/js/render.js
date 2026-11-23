@@ -114,6 +114,12 @@ export class Renderer {
     requestAnimationFrame(loop);
   }
 
+  // swap the six piece images (themes) and rebuild the special-piece sprites from them
+  setGems(gems) {
+    this.img.gems = gems;
+    this.sprites = buildSprites(this.img);
+  }
+
   resize(px) {
     this.size = px;
     this.cv.style.width = px + 'px'; this.cv.style.height = px + 'px';

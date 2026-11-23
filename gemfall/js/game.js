@@ -170,6 +170,20 @@ export class Game {
     }
     return null;
   }
+  // first swap that would create a special piece of the given family ('streak', 'burst' or 'prism'), for the tutorial
+  findMoveMaking(want) {
+    for (let r = 0; r < this.R; r++) for (let c = 0; c < this.C; c++) for (const [dr, dc] of [[0, 1], [1, 0]]) {
+      const A = this.cell(r, c), B = this.cell(r + dr, c + dc);
+      if (!A || !B || !A.piece || !B.piece || A.lock || B.lock) continue;
+      const pa = A.piece, pb = B.piece;
+      if (pa.kind !== 'gem' || pb.kind !== 'gem') continue;
+      A.piece = pb; B.piece = pa;
+      const kinds = this.findMatches().map((g) => this.groupSpecial(g) || '');
+      A.piece = pa; B.piece = pb;
+      if (kinds.some((k) => k.startsWith(want))) return [pa, pb];
+    }
+    return null;
+  }
   mostCommonColor() {
     const n = new Array(6).fill(0);
     this.allPieces().forEach(({ p }) => { if (p.kind === 'gem') n[p.color]++; });
@@ -218,6 +232,7 @@ export class Game {
       return;
     }
     sfx('swap');
+    if (this.h.moved) this.h.moved();
     await this.rd.swap(pa, a, pb, b);
     ca.piece = pb; cb.piece = pa;
     this.moves--; this.hud();
@@ -606,9 +621,10 @@ export class Game {
   armHint() {
     clearTimeout(this.hintTimer);
     this.hintTimer = setTimeout(() => this.showHint(), 5000);
+    if (this.h.idle && !this.ended) this.h.idle();
   }
   showHint() {
-    if (this.busy || this.ended) return;
+    if (this.busy || this.ended || this.coaching) return;
     const m = this.findMove();
     if (m) this.rd.hint = m;
   }
