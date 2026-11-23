@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 VERSION_CODE="${VERSION_CODE:-1}"
-KEY_PASS=gemfall-share
+KEY_PASS=gemfall-share  # not secret: the key is committed so every build is signed the same way
 
 ./copy-web.sh
 npm ci --no-audit --no-fund
@@ -25,18 +25,16 @@ grep -q "versionCode ${VERSION_CODE}\$" android/app/build.gradle
 
 cd android
 chmod +x gradlew
-./gradlew --no-daemon assembleRelease \
-  -Pandroid.injected.signing.store.file="$PWD/../gemfall-share.keystore" \
-  -Pandroid.injected.signing.store.password="$KEY_PASS" \
-  -Pandroid.injected.signing.key.alias=gemfall \
-  -Pandroid.injected.signing.key.password="$KEY_PASS"
-OUT=app/build/outputs/apk/release
-if [ -f "$OUT/app-release.apk" ]; then
-  cp "$OUT/app-release.apk" ../Gemfall.apk
-else
-  # fall back to signing by hand if Gradle left the APK unsigned
-  BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-  "$BT/zipalign" -f 4 "$OUT/app-release-unsigned.apk" aligned.apk
-  "$BT/apksigner" sign --ks ../gemfall-share.keystore --ks-pass "pass:$KEY_PASS" --key-pass "pass:$KEY_PASS" --ks-key-alias gemfall --out ../Gemfall.apk aligned.apk
-fi
+./gradlew --no-daemon assembleRelease
+UNSIGNED=app/build/outputs/apk/release/app-release-unsigned.apk
+
+# Sign with all three schemes (v1 JAR + v2 + v3). Some phone makers' installers (Xiaomi, OPPO, Realme, Vivo)
+# reject an APK that only has the v2 signature with "package appears to be invalid".
+BT=$(ls -d "${ANDROID_HOME:-$ANDROID_SDK_ROOT}"/build-tools/* | sort -V | tail -1)
+"$BT/zipalign" -f -p 4 "$UNSIGNED" aligned.apk
+"$BT/apksigner" sign --ks ../gemfall-share.keystore --ks-pass "pass:$KEY_PASS" --key-pass "pass:$KEY_PASS" --ks-key-alias gemfall \
+  --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out ../Gemfall.apk aligned.apk
+"$BT/apksigner" verify --verbose --min-sdk-version 18 ../Gemfall.apk | tee verify.txt
+grep -q "v1 scheme (JAR signing): true" verify.txt
+grep -q "v2 scheme (APK Signature Scheme v2): true" verify.txt
 ls -l ../Gemfall.apk
