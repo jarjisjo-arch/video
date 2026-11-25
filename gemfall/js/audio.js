@@ -29,24 +29,24 @@ export function unlock() {
 }
 
 let layer = 1; // scales synthesized sound effects that play underneath a recorded one
-function tone(freq, t, dur, type = 'sine', vol = 0.2, glide = null, bus = sfxBus) {
+function tone(freq, t, dur, type = 'sine', vol = 0.2, glide = null, bus = sfxBus, attack = 0.008) {
   if (bus === sfxBus) vol *= layer;
   if (vol <= 0.0002) return;
   const o = ctx.createOscillator(), g = ctx.createGain();
   o.type = type; o.frequency.setValueAtTime(freq, t);
   if (glide) o.frequency.exponentialRampToValueAtTime(glide, t + dur);
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(vol, t + 0.008);
+  g.gain.exponentialRampToValueAtTime(vol, t + attack);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   o.connect(g); g.connect(bus);
   o.start(t); o.stop(t + dur + 0.02);
 }
 
-function noise(t, dur, vol, freq, type = 'bandpass', sweep = null, bus = sfxBus) {
+function noise(t, dur, vol, freq, type = 'bandpass', sweep = null, bus = sfxBus, q = 1.2) {
   if (bus === sfxBus) vol *= layer;
   if (vol <= 0.0002) return;
   const s = ctx.createBufferSource(); s.buffer = noiseBuf;
-  const f = ctx.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(freq, t); f.Q.value = 1.2;
+  const f = ctx.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(freq, t); f.Q.value = q;
   if (sweep) f.frequency.exponentialRampToValueAtTime(sweep, t + dur);
   const g = ctx.createGain();
   g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
@@ -54,46 +54,118 @@ function noise(t, dur, vol, freq, type = 'bandpass', sweep = null, bus = sfxBus)
   s.start(t); s.stop(t + dur + 0.02);
 }
 
-const SCALE = [523.25, 587.33, 659.25, 783.99, 880, 1046.5, 1174.66, 1318.51, 1567.98, 1760];
-
-// ---------- recorded effects ----------
-// files: variants picked at random; vol: loudness; rate(p): pitch for the event's level; layer: how much of the
-// synthesized sound still plays underneath (0 = none); duck: seconds to lower the music for a jingle.
+// ---------- recorded effects (Kenney, CC0) ----------
+// BANK: plain recorded clips. files: variants picked at random; vol: loudness; rate(p): pitch for the event's level;
+// layer: how much of the synthesized sound still plays underneath (0 = none); duck: seconds to lower the music.
 const SFX_DIR = 'assets/sfx/';
 const n5 = (base, ks) => ks.map((k) => `${base}_00${k}`);
 const BANK = {
-  match: { files: n5('impactGlass_light', [0, 1, 2, 3, 4]), vol: 0.55, rate: (p) => 1 + Math.min(p, 8) * 0.07, layer: 0.45 },
-  bad: { files: ['error_004', 'error_007'], vol: 0.4 },
-  click: { files: ['select_001', 'select_002'], vol: 0.6 },
-  special: { files: ['maximize_001', 'maximize_002'], vol: 0.28, layer: 0.5 },
-  streak: { files: n5('impactMetal_light', [0, 3]), vol: 0.6, layer: 0.7 },
-  burst: { files: n5('impactGlass_heavy', [0, 2, 3]), vol: 1, layer: 0.7 },
-  prism: { files: n5('impactBell_heavy', [2, 3]), vol: 0.9, layer: 0.6 },
-  stone: { files: n5('impactMining', [0, 1, 2]), vol: 0.45 },
-  ice: { files: ['glass_002', 'glass_003', 'glass_006'], vol: 0.5 },
   chain: { files: n5('impactMetal_light', [1, 2, 4]), vol: 0.5 },
   crystal: { files: n5('impactGlass_medium', [0, 2, 4]), vol: 0.5, layer: 0.4 },
   hammer: { files: n5('impactPunch_heavy', [1, 3]), vol: 0.8, layer: 0.5 },
   defuse: { files: ['confirmation_004'], vol: 0.27 },
-  pop: { files: ['drop_001'], vol: 0.7 },
-  star: { files: ['confirmation_003'], vol: 0.6, rate: (p) => 1 + p * 0.12, fixed: true },
-  chest: { files: ['jingles_STEEL15'], vol: 0.55, fixed: true, duck: 0.9 },
-  gift: { files: ['jingles_STEEL10'], vol: 0.8, fixed: true, duck: 1, layer: 0.4 },
-  win: { files: ['jingles_STEEL02'], vol: 0.8, fixed: true, duck: 1.5 },
-  fail: { files: ['jingles_STEEL01'], vol: 0.8, fixed: true, duck: 1.5 }
+  pop: { files: ['drop_001'], vol: 0.7 }
 };
+
+// RECIPES: the designed sounds (option C on the listening page). Each layers recordings with bells and sparkle
+// tuned to C major pentatonic, the music's key. gain keeps them at the balance the game already had.
+const PENT = [1046.5, 1174.7, 1318.5, 1568.0, 1760.0, 2093.0, 2349.3, 2637.0, 3136.0];
+const pick = (list) => list[Math.floor(Math.random() * list.length)];
+const RECIPES = {
+  match: { gain: 0.91, play(p, t) {
+    const k = Math.min(p, 7), f = PENT[k + 1];
+    clip(pick(['impactGlass_light_000', 'impactGlass_light_002', 'impactGlass_light_004']), t, { rate: 1.12 + Math.min(p, 8) * 0.06, vol: 0.32 });
+    bell(f, t + 0.004, 0.5, 0.16); bell(f * 1.5, t + 0.035, 0.32, 0.055);
+    sparkle(t + 0.02, 3, 0.12, 0.022);
+  } },
+  special: { gain: 1.19, play(p, t) {
+    noise(t, 0.38, 0.1, 700, 'bandpass', 5200, sfxBus, 0.9);
+    clip('maximize_002', t, { vol: 0.22 });
+    [PENT[0], PENT[2], PENT[3], PENT[5]].forEach((f, i) => bell(f, t + 0.05 + i * 0.055, 0.55, 0.11));
+    sparkle(t + 0.2, 6, 0.3, 0.025);
+  } },
+  streak: { gain: 1.65, play(p, t) {
+    noise(t, 0.3, 0.32, 300, 'bandpass', 7000, sfxBus, 0.8);
+    tone(520, t, 0.26, 'sawtooth', 0.025, 2600);
+    clip('impactMetal_light_000', t + 0.05, { vol: 0.35, rate: 1.1 });
+    bell(PENT[5], t + 0.06, 0.4, 0.07);
+    sparkle(t + 0.12, 6, 0.3, 0.022);
+  } },
+  burst: { gain: 0.66, play(p, t) {
+    tone(140, t, 0.45, 'sine', 0.55, 42);
+    noise(t, 0.5, 0.42, 1400, 'lowpass', 140, sfxBus, 0.7);
+    clip('impactGlass_heavy_003', t + 0.01, { vol: 0.65 });
+    clip('impactGlass_light_001', t + 0.06, { vol: 0.25, rate: 1.3 });
+    sparkle(t + 0.08, 7, 0.45, 0.025);
+  } },
+  prism: { gain: 1.38, play(p, t) {
+    for (let i = 0; i < 12; i++) bell(PENT[i % PENT.length] / (i < PENT.length ? 2 : 1), t + i * 0.028, 0.35, 0.065);
+    clip('impactBell_heavy_002', t, { vol: 0.45 });
+    noise(t, 0.9, 0.05, 6500, 'highpass');
+    [PENT[0], PENT[2], PENT[3]].forEach((f) => bell(f, t + 0.36, 1.0, 0.07));
+    sparkle(t + 0.3, 10, 0.7, 0.022);
+  } },
+  stone: { gain: 0.64, play(p, t) {
+    clip('impactMining_000', t, { vol: 0.55, len: 0.32 });
+    noise(t + 0.02, 0.28, 0.22, 900, 'lowpass', 180, sfxBus, 0.7);
+    tone(95, t, 0.16, 'triangle', 0.08, 60);
+  } },
+  ice: { gain: 0.67, play(p, t) {
+    clip('glass_003', t, { vol: 0.42 });
+    noise(t, 0.12, 0.08, 5200, 'highpass');
+    bell(PENT[7], t + 0.01, 0.32, 0.075); bell(PENT[8] * 1.12, t + 0.045, 0.26, 0.045);
+  } },
+  star: { gain: 1.35, play(p, t) {
+    const f = [PENT[2], PENT[3], PENT[5]][Math.min(p, 2)];
+    clip('confirmation_003', t, { rate: 1 + p * 0.12, vol: 0.25 });
+    bell(f, t, 0.8, 0.15); bell(f * 1.5, t + 0.05, 0.6, 0.06);
+    sparkle(t + 0.05, 4, 0.3, 0.025);
+  } },
+  win: { gain: 0.94, duck: 1.6, play(p, t) {
+    clip('jingles_STEEL02', t, { vol: 0.7 });
+    sparkle(t + 0.25, 14, 1.2, 0.022);
+    [PENT[0], PENT[2], PENT[3], PENT[5]].forEach((f, i) => bell(f, t + 1.08 + i * 0.03, 1.3, 0.06));
+  } },
+  fail: { gain: 1.8, duck: 1.4, play(p, t) {
+    // a gentle falling bell phrase over a soft low note
+    [PENT[3], PENT[2], PENT[1], PENT[0] / 1.122].forEach((f, i) => bell(f / 2, t + i * 0.2, i === 3 ? 1.1 : 0.5, 0.15));
+    tone(196, t + 0.05, 1.3, 'sine', 0.06, 165, sfxBus, 0.08);
+  } },
+  chest: { gain: 0.8, duck: 0.9, play(p, t) {
+    clip('jingles_STEEL15', t, { vol: 0.7 });
+    sparkle(t + 0.15, 8, 0.6, 0.022);
+  } },
+  gift: { gain: 1, duck: 1.2, play(p, t) {
+    clip('jingles_STEEL10', t, { vol: 0.7 });
+    sparkle(t + 0.2, 10, 0.8, 0.022);
+    [PENT[0], PENT[2], PENT[3]].forEach((f, i) => bell(f, t + 0.75 + i * 0.03, 1.0, 0.06));
+  } },
+  click: { gain: 1.07, play(p, t) {
+    clip('select_002', t, { vol: 0.45 });
+    tone(880, t, 0.07, 'sine', 0.07, 1320);
+  } },
+  bad: { gain: 1.33, play(p, t) {
+    tone(330, t, 0.13, 'triangle', 0.12, 220);
+    tone(165, t, 0.15, 'sine', 0.1);
+    clip('toggle_004', t, { vol: 0.2 });
+  } }
+};
+const RECIPE_CLIPS = ['impactGlass_light_000', 'impactGlass_light_001', 'impactGlass_light_002', 'impactGlass_light_004', 'maximize_002',
+  'impactMetal_light_000', 'impactGlass_heavy_003', 'impactBell_heavy_002', 'impactMining_000', 'glass_003', 'confirmation_003',
+  'jingles_STEEL02', 'jingles_STEEL10', 'jingles_STEEL15', 'select_002', 'toggle_004'];
+
 const buffers = {};
 let bankStarted = false;
 function loadBank() {
   if (bankStarted || !ctx || typeof fetch !== 'function') return;
   bankStarted = true;
-  const names = new Set(Object.values(BANK).flatMap((b) => b.files));
+  const names = new Set([...Object.values(BANK).flatMap((b) => b.files), ...RECIPE_CLIPS]);
   names.forEach((n) => {
     fetch(SFX_DIR + n + '.mp3')
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(r.status))))
       .then((a) => new Promise((res, rej) => ctx.decodeAudioData(a, res, rej)))
       .then((b) => { buffers[n] = b; })
-      .catch(() => { /* this one stays synthesized */ });
+      .catch(() => { /* that layer stays silent; the synthesized layers still play */ });
   });
 }
 const MUSIC_VOL = 0.16;
@@ -101,6 +173,25 @@ function duck(sec) {
   const g = musicBus.gain, t = ctx.currentTime;
   g.cancelScheduledValues(t); g.setValueAtTime(g.value, t);
   g.linearRampToValueAtTime(0.03, t + 0.08); g.setValueAtTime(0.03, t + sec); g.linearRampToValueAtTime(MUSIC_VOL, t + sec + 0.8);
+}
+// plays one loaded clip through the effects bus; skipped quietly if it hasn't loaded
+function clip(name, t, { rate = 1, vol = 1, len = null } = {}) {
+  const b = buffers[name];
+  if (!b) return false;
+  const src = ctx.createBufferSource(), g = ctx.createGain();
+  src.buffer = b; src.playbackRate.value = rate; g.gain.value = vol * layer;
+  src.connect(g); g.connect(sfxBus); src.start(t);
+  if (len) { g.gain.setValueAtTime(vol * layer, t + len - 0.06); g.gain.linearRampToValueAtTime(0.0001, t + len); src.stop(t + len + 0.01); }
+  return true;
+}
+// a struck bell: fundamental plus slightly inharmonic overtones
+function bell(f, t, dur, vol) {
+  tone(f, t, dur, 'sine', vol, null, sfxBus, 0.003);
+  tone(f * 2.01, t, dur * 0.6, 'sine', vol * 0.32, null, sfxBus, 0.003);
+  tone(f * 3.03, t, dur * 0.35, 'sine', vol * 0.12, null, sfxBus, 0.003);
+}
+function sparkle(t, n, spread, vol) {
+  for (let i = 0; i < n; i++) tone(2600 + Math.random() * 3600, t + Math.random() * spread, 0.07 + Math.random() * 0.08, 'sine', vol * (0.6 + Math.random() * 0.4), null, sfxBus, 0.002);
 }
 function playSample(b, p) {
   const ready = b.files.filter((f) => buffers[f]);
@@ -118,6 +209,14 @@ function playSample(b, p) {
 
 export function sfx(name, p = 0) {
   if (!ctx || !sfxOn) return;
+  const t = ctx.currentTime + 0.01;
+  const r = RECIPES[name];
+  if (r) {
+    layer = r.gain;
+    try { r.play(p, t); } finally { layer = 1; }
+    if (r.duck && musicOn) duck(r.duck);
+    return;
+  }
   const b = BANK[name];
   if (b && playSample(b, p)) {
     if (!b.layer) return;
@@ -130,24 +229,7 @@ function synth(name, p) {
   const t = ctx.currentTime + 0.01;
   switch (name) {
     case 'swap': tone(440, t, 0.08, 'triangle', 0.12, 660); break;
-    case 'bad': tone(200, t, 0.09, 'square', 0.06); tone(160, t + 0.09, 0.12, 'square', 0.06); break;
-    case 'match': {
-      const f = SCALE[Math.min(SCALE.length - 1, p)];
-      tone(f, t, 0.22, 'sine', 0.22); tone(f * 2, t, 0.12, 'triangle', 0.05); tone(f * 1.5, t + 0.04, 0.16, 'sine', 0.06);
-      break;
-    }
-    case 'special': [784, 988, 1318, 1568].forEach((f, i) => tone(f, t + i * 0.05, 0.18, 'triangle', 0.12)); break;
-    case 'streak': noise(t, 0.32, 0.28, 700, 'bandpass', 5000); tone(600, t, 0.25, 'sawtooth', 0.04, 2200); break;
-    case 'burst': noise(t, 0.45, 0.5, 900, 'lowpass', 120); tone(140, t, 0.35, 'sine', 0.4, 45); break;
-    case 'prism': for (let i = 0; i < 9; i++) tone(SCALE[i], t + i * 0.035, 0.22, 'sine', 0.09); noise(t, 0.6, 0.12, 3000, 'highpass'); break;
-    case 'stone': noise(t, 0.16, 0.35, 1800, 'highpass'); tone(220, t, 0.08, 'square', 0.05, 90); break;
-    case 'ice': tone(2093, t, 0.14, 'sine', 0.07); tone(2637, t + 0.03, 0.12, 'sine', 0.05); break;
-    case 'chest': [988, 1318, 1976].forEach((f, i) => tone(f, t + i * 0.07, 0.2, 'square', 0.05)); break;
     case 'land': tone(180, t, 0.05, 'sine', 0.05, 120); break;
-    case 'star': tone(880 + p * 220, t, 0.35, 'triangle', 0.14); tone(1320 + p * 330, t + 0.04, 0.3, 'sine', 0.08); break;
-    case 'win': [523, 659, 784, 1046, 1318].forEach((f, i) => tone(f, t + i * 0.1, 0.45, 'triangle', 0.13)); tone(523, t + 0.5, 0.9, 'sine', 0.1); tone(784, t + 0.5, 0.9, 'sine', 0.08); break;
-    case 'fail': [392, 330, 262, 196].forEach((f, i) => tone(f, t + i * 0.16, 0.3, 'triangle', 0.12)); break;
-    case 'click': tone(720, t, 0.05, 'triangle', 0.1); break;
     case 'shuffle': for (let i = 0; i < 6; i++) tone(400 + Math.random() * 600, t + i * 0.04, 0.06, 'triangle', 0.06); break;
     case 'hammer': noise(t, 0.2, 0.45, 600, 'lowpass'); tone(110, t, 0.2, 'sine', 0.35, 60); break;
     case 'rush': tone(1046 + p * 60, t, 0.12, 'triangle', 0.1); break;
@@ -156,7 +238,6 @@ function synth(name, p) {
     case 'creep': tone(220, t, 0.35, 'sawtooth', 0.05, 330); noise(t, 0.3, 0.1, 500, 'lowpass'); break;
     case 'defuse': tone(988, t, 0.1, 'triangle', 0.1); tone(1318, t + 0.08, 0.2, 'triangle', 0.1); break;
     case 'life': tone(392, t, 0.25, 'triangle', 0.1); tone(330, t + 0.18, 0.4, 'triangle', 0.1); break;
-    case 'gift': [659, 784, 988, 1318, 1568].forEach((f, i) => tone(f, t + i * 0.06, 0.3, 'triangle', 0.11)); noise(t + 0.3, 0.5, 0.12, 4000, 'highpass'); break;
     case 'pop': tone(880, t, 0.08, 'sine', 0.14, 1320); break;
   }
 }
@@ -208,4 +289,4 @@ function startMusic() {
 function stopMusic() { clearInterval(musicTimer); musicTimer = null; }
 
 // for tests: how many recorded effects have loaded
-export function bankStatus() { return { loaded: Object.keys(buffers).length, total: new Set(Object.values(BANK).flatMap((b) => b.files)).size }; }
+export function bankStatus() { return { loaded: Object.keys(buffers).length, total: new Set([...Object.values(BANK).flatMap((b) => b.files), ...RECIPE_CLIPS]).size }; }
