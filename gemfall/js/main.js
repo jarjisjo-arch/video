@@ -3,6 +3,11 @@ import { LEVELS, WORLDS, mapFor, getLevel, layoutCount } from './levels.js';
 import { Renderer } from './render.js';
 import { Game } from './game.js';
 import * as audio from './audio.js';
+import { BUILD } from './build-info.js';
+import { isApp, appReady, appBuild, checkForUpdates } from './updates.js';
+
+// tell the updater straight away that this version of the game started, so it isn't rolled back
+appReady();
 
 const $ = (id) => document.getElementById(id);
 const A = 'assets/';
@@ -80,7 +85,7 @@ async function preload() {
 
 let rd = null, game = null, current = 0, hammerMode = false, iceIcon = '', endTimer = null;
 
-function show(id) { document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === id)); }
+function show(id) { document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === id)); $('app').dataset.screen = id; }
 
 // ---------- goal helpers ----------
 const COUNTED = ['ice', 'stone', 'lock', 'crystal'];
@@ -125,6 +130,8 @@ $('modal').addEventListener('click', (e) => {
     applyTheme(b.dataset.theme);
   } else if (act === 'claim') claimDaily();
   else if (act === 'coach-ok') clearCoach(true);
+  else if (act === 'update-restart') { closeModal(); if (updateNotice && updateNotice.restart) updateNotice.restart(); }
+  else if (act === 'update-get') { if (updateNotice && updateNotice.url) window.location.href = updateNotice.url; }
   else if (act === 'sfx' || act === 'music') {
     save[act] = !save[act]; persist(); audio.setPrefs(save.sfx, save.music);
     b.setAttribute('aria-pressed', String(save[act])); syncSoundBtn();
@@ -151,10 +158,12 @@ async function applyTheme(id) {
   $('gameBg').src = A + THEMES[id].bg;
   if ($('map').classList.contains('active')) buildMap(false);
 }
+function versionText() { return isApp ? `Gemfall app 1.${appVer || '?'} · game content ${BUILD.number}` : 'Gemfall web version'; }
 function openSettings() {
   modal(`${closeX}<h2 class="gold-title" style="margin-top: 6px">Settings</h2>${toggles()}${themePicker()}
     <div class="actions"><button class="btn btn-purple" data-act="close">Done</button>
-    <button class="btn btn-orange" data-act="reset" style="font-size: 18px; height: 48px">Reset progress</button></div>`);
+    <button class="btn btn-orange" data-act="reset" style="font-size: 18px; height: 48px">Reset progress</button></div>
+    <div class="version">${versionText()}</div>`);
 }
 function confirmQuit(then) {
   modal(`<img class="mascot" src="${A}mascot-oops.png" alt="">
@@ -177,7 +186,7 @@ function tryPlay(i) {
 }
 
 // ---------- title ----------
-function openTitle() { show('title'); $('titleStars').textContent = totalStars(); renderLives(); audio.setTrack('menu'); }
+function openTitle() { show('title'); $('titleSub').textContent = `${LAST} levels, then the Endless Dig`; $('titleStars').textContent = totalStars(); renderLives(); audio.setTrack('menu'); setTimeout(showUpdateNotice, 400); }
 $('playBtn').addEventListener('click', () => { audio.unlock(); audio.sfx('click'); openMap(); });
 $('titleSettings').addEventListener('click', () => { audio.unlock(); audio.sfx('click'); openSettings(); });
 
@@ -193,6 +202,7 @@ function openMap() {
   show('map'); buildMap(); renderLives(); renderStreak();
   audio.setTrack('menu');
   if (!dailyState().claimed) setTimeout(() => { if ($('map').classList.contains('active') && $('overlay').classList.contains('hidden')) showDaily(); }, 550);
+  setTimeout(showUpdateNotice, 900);
 }
 function buildMap(scroll = true) {
   const keepScroll = $('mapScroll').scrollTop;
@@ -457,7 +467,7 @@ function showWin(res, reward) {
   const n = current + 1, opened = n === LAST;
   modal(`<img class="mascot" src="${A}${opened ? 'ui-crown.png' : 'mascot-happy.png'}" alt="">
     <div class="sub">LEVEL ${n}</div>
-    <h2 class="gold-title">${opened ? 'Mountain conquered!' : 'Complete!'}</h2>
+    <h2 class="gold-title">${opened ? 'Every world conquered!' : 'Complete!'}</h2>
     <div class="stars" role="img" aria-label="${res.stars} of 3 stars"><img src="${A}ui-star.png" alt="" id="ws0"><img src="${A}ui-star.png" class="mid" alt="" id="ws1"><img src="${A}ui-star.png" alt="" id="ws2"></div>
     <div class="scorebox"><div style="text-align: left"><div class="sub">SCORE</div><div class="v">${res.score.toLocaleString()}</div></div><div style="text-align: right"><div class="sub">BEST</div><div class="v" style="font-size: 22px">${(save.best[n] || res.score).toLocaleString()}</div></div></div>
     ${reward ? `<div class="reward"><img src="${A}ui-chest.png" alt=""><div><div class="h-font" style="font-size: 19px; color: var(--gold-2)">Treasure found!</div><div style="font-size: 13px; font-weight: 800">${reward}</div></div></div>` : ''}
@@ -588,7 +598,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('over
 // ---------- music per area ----------
 function trackFor(n) {
   if (n > LAST) return 'endless';
-  return ['caverns', 'caverns', 'glow', 'glow', 'forge', 'ruins', 'heart'][WORLDS.indexOf(worldOf(n))] || 'caverns';
+  return ['caverns', 'caverns', 'glow', 'glow', 'forge', 'ruins', 'heart', 'vault', 'temple'][WORLDS.indexOf(worldOf(n))] || 'caverns';
 }
 
 // ---------- tutorial coach: a pointing hand and Digby explain new ideas the first time ----------
@@ -716,11 +726,55 @@ function claimDaily() {
 }
 $('mapDaily').addEventListener('click', () => { audio.unlock(); audio.sfx('click'); showDaily(); });
 
+// ---------- updates (Android app only; see updates.js) ----------
+let appVer = 0, updateNotice = null;
+function showUpdateNotice() {
+  const n = updateNotice;
+  if (!n || n.shown) return;
+  const here = $('app').dataset.screen;
+  if ((here !== 'title' && here !== 'map') || !$('overlay').classList.contains('hidden')) return;
+  n.shown = true;
+  if (n.kind === 'content') {
+    modal(`<img class="mascot" src="${A}mascot-happy.png" alt="">
+      <h2 class="gold-title">Update ready</h2>
+      <div class="meta">${n.notes ? '' : 'New levels and improvements have downloaded.'}</div>
+      <div class="actions"><button class="btn btn-green" data-act="update-restart">Restart now</button>
+      <button class="btn btn-purple" data-act="close">Later</button></div>
+      <div class="meta" style="font-size: 13px">It also switches over by itself the next time you close Gemfall.</div>`);
+    if (n.notes) $('modal').querySelector('.meta').textContent = n.notes;
+  } else {
+    modal(`${closeX}<img class="mascot" src="${A}ui-gift.png" alt="" style="height: 110px">
+      <h2 class="gold-title">New version available</h2>
+      <div class="meta"></div>
+      <div class="actions"><button class="btn btn-green" data-act="update-get">Download it</button>
+      <button class="btn btn-purple" data-act="close">Later</button></div>
+      <div class="meta" style="font-size: 13px">Open the downloaded file to install it. Your progress is kept.</div>`);
+    $('modal').querySelector('.meta').textContent = n.message || 'A newer version of Gemfall is ready to install. It brings things this version can\u2019t get as a quick update.';
+  }
+}
+function showForceUpdate(url, message, applying = false) {
+  const el = $('forceUpdate');
+  el.querySelector('h2').textContent = applying ? 'Updating Gemfall' : 'Update needed';
+  el.querySelector('.msg').textContent = applying ? 'Getting the latest version. This only takes a moment.'
+    : (message || 'This version of Gemfall needs an important fix. Download the new version to keep playing.');
+  const btn = el.querySelector('button');
+  btn.hidden = applying || !url;
+  btn.onclick = () => { window.location.href = url; };
+  el.querySelector('.hint').hidden = applying;
+  el.classList.remove('hidden');
+}
+const updateUi = {
+  forceApp: (url, message) => showForceUpdate(url, message),
+  contentApplying: () => showForceUpdate(null, '', true),
+  suggestApp: (url, message) => { updateNotice = { kind: 'app', url, message }; showUpdateNotice(); },
+  contentReady: (restart, notes) => { updateNotice = { kind: 'content', restart, notes }; showUpdateNotice(); }
+};
+
 // debugging and automated tests
 window.__gemfall = {
   get game() { return game; }, startLevel, openMap, getLevel, get save() { return save; }, get rd() { return rd; },
   setLives(n, agoMs = 0) { save.lives = n; save.livesAt = n >= MAX_LIVES ? 0 : Date.now() - agoMs; persist(); renderLives(); },
-  applyTheme, showDaily, claimDaily, clearCoach, get coach() { return coach; }
+  applyTheme, showDaily, claimDaily, clearCoach, get coach() { return coach; }, updateUi
 };
 
 (async () => {
@@ -731,4 +785,6 @@ window.__gemfall = {
   $('loading').classList.add('hidden');
   syncLives();
   openTitle();
+  appBuild().then((v) => { appVer = v; });
+  checkForUpdates(updateUi);
 })();

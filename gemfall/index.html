@@ -185,6 +185,12 @@
     #title .logo, #title .digby, #title .fg, #title .play, .node .glow, .map-digby { animation: none !important; }
   }
   #fx img { position: absolute; left: 0; top: 0; width: 40px; height: 40px; }
+  .modal .version { margin-top: 12px; font-size: 12px; font-weight: 800; color: var(--muted); opacity: 0.8; }
+  #forceUpdate { position: absolute; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom)); text-align: center; background: radial-gradient(ellipse at 50% 35%, #3a2580, #140c30 70%); }
+  #forceUpdate img { width: 150px; filter: drop-shadow(0 10px 14px rgba(0,0,0,0.5)); }
+  #forceUpdate h2 { margin: 0; font-size: 38px; }
+  #forceUpdate .msg { max-width: 320px; font-weight: 800; font-size: 16px; color: var(--muted); line-height: 1.4; }
+  #forceUpdate .hint { max-width: 300px; font-size: 13px; font-weight: 800; color: var(--muted); opacity: 0.85; }
 
   /* map seams between worlds, daily button */
   #map .seam { position: absolute; left: 0; right: 0; height: 90px; transform: translateY(-50%); background: linear-gradient(rgba(16,8,40,0), rgba(16,8,40,0.85) 50%, rgba(16,8,40,0)); pointer-events: none; }
@@ -274,7 +280,7 @@
         <img class="chest" src="assets/ui-chest.png" alt="">
       </div>
       <button class="btn btn-green play" id="playBtn">PLAY</button>
-      <div class="sub">60 levels, then the Endless Dig</div>
+      <div class="sub" id="titleSub">81 levels, then the Endless Dig</div>
     </div>
   </section>
 
@@ -326,6 +332,13 @@
     </div>
   </section>
 
+  <div id="forceUpdate" class="hidden" role="alertdialog" aria-modal="true" aria-labelledby="forceTitle">
+    <img src="assets/mascot-oops.png" alt="">
+    <h2 class="gold-title" id="forceTitle">Update needed</h2>
+    <div class="msg"></div>
+    <button class="btn btn-green" type="button" style="height: 62px; font-size: 26px">Download update</button>
+    <div class="hint">Open the downloaded file to install it. Your progress is kept.</div>
+  </div>
   <div id="overlay" class="hidden"><div class="modal panel" id="modal" role="dialog" aria-modal="true"></div></div>
   <div id="fx"></div>
 </div>

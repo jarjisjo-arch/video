@@ -35,12 +35,16 @@ jobs:
         working-directory: gemfall-android
         env:
           VERSION_CODE: ${{ github.run_number }}
+          RELEASE_BASE: https://github.com/${{ github.repository }}/releases/download/gemfall-latest
         run: ./build-android.sh
 
       - uses: actions/upload-artifact@v4
         with:
           name: Gemfall-apk
-          path: gemfall-android/Gemfall.apk
+          path: |
+            gemfall-android/Gemfall.apk
+            gemfall-android/gemfall-web.zip
+            gemfall-android/update.json
 
       - name: Publish to the gemfall-latest release
         env:
@@ -53,4 +57,6 @@ jobs:
           else
             gh release create gemfall-latest --title "Gemfall for Android" --notes "$NOTES" --target "$GITHUB_SHA"
           fi
-          gh release upload gemfall-latest gemfall-android/Gemfall.apk --clobber
+          # the app and the content first, then update.json, so the manifest never points at files not uploaded yet
+          gh release upload gemfall-latest gemfall-android/Gemfall.apk gemfall-android/gemfall-web.zip --clobber
+          gh release upload gemfall-latest gemfall-android/update.json --clobber

@@ -325,7 +325,117 @@ export const LEVELS = [
     moves: 30, colors: 5, bombs: { rate: 0.03, fuse: 12 },
     layout: ['_k....k_', 'k.i..i.k', '..S..S..', '.i.cc.i.', '.i.cc.i.', '..S..S..', 'k.i..i.k', '_k....k_'],
     goals: [{ type: 'lock' }, { type: 'ice' }, { type: 'stone' }, { type: 'crystal' }],
-    tip: 'The Heart of the Mountain! Beat this and the Endless Dig opens.'
+    tip: 'The Heart of the Mountain fights back. Use everything you have learned!'
+  },
+  {
+    moves: 32, colors: 5,
+    layout: ['........', '.iiiiii.', '.i.SS.i.', '.i.SS.i.', '.i....i.', '.iiiiii.', '........', '........'],
+    goals: [{ type: 'ice' }, { type: 'stone' }, { type: 'chest', target: 2 }]
+  },
+  {
+    moves: 26, colors: 5, bombs: { rate: 0.035, fuse: 12 },
+    layout: ['c......c', '........', '........', '........', '........', '........', '........', 'c......c'],
+    goals: [{ type: 'crystal' }, { type: 'collect', color: 3, target: 22 }]
+  },
+  {
+    moves: 32, colors: 5,
+    layout: ['_..kk.._', '..SkkS..', '.S.ii.S.', 'kkiIIikk', 'kkiIIikk', '.S.ii.S.', '..S..S..', '_......_'],
+    goals: [{ type: 'lock' }, { type: 'ice' }, { type: 'stone' }],
+    tip: 'The innermost chamber of the Heart. Beyond it lies the Golden Vault!'
+  },
+  // ---------- Golden Vault ----------
+  {
+    moves: 30, colors: 5,
+    layout: ['........', '........', '........', 's.s..s.s', '........', '........', '........', '........'],
+    goals: [{ type: 'chest', target: 3 }, { type: 'stone' }],
+    tip: 'Welcome to the Golden Vault! Treasure chests everywhere. Clear a way down for them.'
+  },
+  {
+    moves: 22, colors: 5, layout: FULL,
+    goals: [{ type: 'collect', color: 1, target: 32 }]
+  },
+  {
+    moves: 32, colors: 5,
+    layout: ['ll.ll.ll', 'l......l', 'l......l', 'l......l', 'l......l', 'l......l', 'l......l', 'll.ll.ll'],
+    goals: [{ type: 'lock' }],
+    tip: 'The vault doors are chained shut. Snap every chain!'
+  },
+  {
+    moves: 24, colors: 5, bombs: { rate: 0.04, fuse: 11 }, stars: [10000, 15000, 21000], layout: FULL,
+    goals: [{ type: 'score', target: 10000 }]
+  },
+  {
+    moves: 34, colors: 5,
+    layout: ['ssssssss', 's......s', '..S..S..', '........', '........', '..S..S..', 's......s', 'ssssssss'],
+    goals: [{ type: 'stone' }, { type: 'chest', target: 2 }]
+  },
+  {
+    moves: 34, colors: 5,
+    layout: ['___ii___', '__iiii__', '_iiiiii_', 'iiiIIiii', 'iiiIIiii', '_iiiiii_', '__iiii__', '___ii___'],
+    goals: [{ type: 'ice' }]
+  },
+  {
+    moves: 32, colors: 5,
+    layout: ['c......c', 'c......c', '........', '........', '........', '........', '........', '........'],
+    goals: [{ type: 'crystal' }, { type: 'chest', target: 3 }]
+  },
+  {
+    moves: 31, colors: 5, bombs: { rate: 0.03, fuse: 12 },
+    layout: ['l......l', '.l....l.', '........', '........', '........', '........', '.l....l.', 'l......l'],
+    goals: [{ type: 'collect', color: 1, target: 22 }, { type: 'collect', color: 4, target: 22 }, { type: 'lock' }]
+  },
+  {
+    moves: 36, colors: 5,
+    layout: ['kk....kk', 'kSS..SSk', '.S.cc.S.', '...cc...', '...cc...', '.S.cc.S.', 'kSS..SSk', 'kk....kk'],
+    goals: [{ type: 'lock' }, { type: 'ice' }, { type: 'stone' }, { type: 'crystal' }],
+    tip: 'The vault\'s treasure room. Every trick you know!'
+  },
+  // ---------- Overgrown Temple ----------
+  {
+    moves: 21, colors: 5,
+    layout: ['........', '........', '........', 'cccccccc', '........', '........', '........', '........'],
+    goals: [{ type: 'crystal' }],
+    tip: 'In the Overgrown Temple, crystal grows like vines. Break some every turn!'
+  },
+  {
+    moves: 36, colors: 5,
+    layout: ['iiiiiiii', 'iIIIIIIi', 'i......i', 'i......i', 'i......i', 'i......i', 'iIIIIIIi', 'iiiiiiii'],
+    goals: [{ type: 'ice' }]
+  },
+  {
+    moves: 34, colors: 5,
+    layout: ['........', '.S.SS.S.', '.S....S.', '.S....S.', '.S....S.', '.S....S.', '........', '........'],
+    goals: [{ type: 'stone' }, { type: 'chest', target: 3 }]
+  },
+  {
+    moves: 30, colors: 5, bombs: { rate: 0.04, fuse: 11 },
+    layout: ['c......c', '........', '........', '........', '........', '........', '........', 'c......c'],
+    goals: [{ type: 'crystal' }, { type: 'collect', color: 2, target: 25 }]
+  },
+  {
+    moves: 28, colors: 6,
+    layout: ['__....__', '__....__', '........', '........', '........', '........', '__....__', '__....__'],
+    goals: [{ type: 'collect', color: 2, target: 25 }, { type: 'collect', color: 5, target: 20 }]
+  },
+  {
+    moves: 30, colors: 5,
+    layout: ['k.k..k.k', '.k....k.', 'k.k..k.k', '........', '........', 'k.k..k.k', '.k....k.', 'k.k..k.k'],
+    goals: [{ type: 'lock' }, { type: 'ice' }]
+  },
+  {
+    moves: 30, colors: 6, stars: [6000, 10000, 15000], layout: FULL,
+    goals: [{ type: 'score', target: 6000 }]
+  },
+  {
+    moves: 36, colors: 5, bombs: { rate: 0.03, fuse: 12 },
+    layout: ['ss....ss', 's.c..c.s', '........', '...SS...', '...SS...', '........', 's.c..c.s', 'ss....ss'],
+    goals: [{ type: 'stone' }, { type: 'crystal' }]
+  },
+  {
+    moves: 42, colors: 5, bombs: { rate: 0.03, fuse: 13 },
+    layout: ['_kk..kk_', 'k.c..c.k', 'k.SiiS.k', 'k.iIIi.k', 'k.iIIi.k', 'k.SiiS.k', 'k.c..c.k', '_kk..kk_'],
+    goals: [{ type: 'lock' }, { type: 'ice' }, { type: 'stone' }, { type: 'crystal' }],
+    tip: 'The deepest chamber of all! Beat it and the Endless Dig opens.'
   }
 ];
 
@@ -337,6 +447,8 @@ export const WORLDS = [
   { name: 'Lava Forge', from: 37 },
   { name: 'Sunken Ruins', from: 46 },
   { name: 'Heart of the Mountain', from: 55 },
+  { name: 'Golden Vault', from: 64 },
+  { name: 'Overgrown Temple', from: 73 },
   { name: 'The Endless Dig', from: LEVELS.length + 1 }
 ];
 
@@ -346,7 +458,7 @@ export const MAP_PLATFORMS = [
   [504.4, 564.9], [424.2, 443.5], [523.8, 309.4], [439.7, 199.6]
 ];
 
-// One painted map per world (9 platforms each, 864 x 1536, bottom to top). Sections past world 7 reuse the Endless map.
+// One painted map per world (9 platforms each, 864 x 1536, bottom to top). Sections past world 9 reuse the Endless map.
 export const WORLD_MAPS = [
   { img: 'map.jpg', pts: MAP_PLATFORMS },
   { img: 'map-w2.jpg', pts: [[404.8, 1315.3], [473.4, 1145.1], [388.2, 999.4], [475.6, 864.7], [389.0, 737.8], [473.3, 606.4], [385.6, 487.3], [512.7, 378.3], [462.4, 258.3]] },
@@ -355,6 +467,8 @@ export const WORLD_MAPS = [
   { img: 'map-w5.jpg', pts: [[414.1, 1208.2], [523.9, 1024.5], [430.4, 868.0], [476.9, 712.6], [360.2, 588.2], [473.4, 464.1], [426.5, 329.4], [525.0, 223.9], [432.4, 130.3]] },
   { img: 'map-w6.jpg', pts: [[423.6, 1341.1], [472.8, 1134.5], [540.8, 956.4], [436.9, 813.3], [359.6, 681.9], [469.4, 556.8], [499.2, 426.2], [407.5, 310.4], [409.4, 197.9]] },
   { img: 'map-w7.jpg', pts: [[398.1, 1251.2], [456.2, 1093.8], [383.2, 962.7], [478.7, 835.8], [403.4, 721.3], [466.6, 607.2], [398.4, 502.2], [438.7, 389.5], [392.3, 285.8]] },
+  { img: 'map-w8.jpg', pts: [[437.3, 1315.8], [460.2, 1114.7], [397.4, 962.7], [498.4, 825.6], [465.0, 690.7], [429.9, 568.7], [470.2, 447.6], [394.6, 347.8], [452.9, 244.0]] },
+  { img: 'map-w9.jpg', pts: [[446.9, 1316.3], [393.2, 1123.9], [480.4, 959.7], [408.7, 813.2], [504.9, 689.6], [433.7, 559.2], [518.7, 432.3], [448.1, 311.9], [536.2, 200.7]] },
   { img: 'map-endless.jpg', pts: [[415.8, 1338.0], [503.4, 1110.8], [374.1, 940.4], [503.8, 785.6], [371.3, 635.0], [505.7, 489.9], [397.2, 358.1], [501.5, 229.7], [385.5, 119.0]] }
 ];
 export const mapFor = (section) => WORLD_MAPS[Math.min(section, WORLD_MAPS.length - 1)];

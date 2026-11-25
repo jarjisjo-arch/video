@@ -5,7 +5,8 @@
   "description": "Android app wrapper for Gemfall. GitHub Actions builds the APK from this folder.",
   "dependencies": {
     "@capacitor/android": "8.6.0",
-    "@capacitor/core": "8.6.0"
+    "@capacitor/core": "8.6.0",
+    "@capgo/capacitor-updater": "8.54.2"
   },
   "devDependencies": {
     "@capacitor/assets": "3.0.5",

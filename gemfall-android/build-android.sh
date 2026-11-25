@@ -8,6 +8,14 @@ VERSION_CODE="${VERSION_CODE:-1}"
 KEY_PASS=gemfall-share  # not secret: the key is committed so every build is signed the same way
 
 ./copy-web.sh
+# stamp the build number into the game so it knows which version it is
+cat > www/js/build-info.js <<JS
+// Written by build-android.sh.
+export const BUILD = { number: ${VERSION_CODE}, commit: '${GITHUB_SHA:-local}' };
+JS
+# the game content as a zip, for players who already have the app (live update)
+rm -f gemfall-web.zip && (cd www && python3 -c "import shutil; shutil.make_archive('../gemfall-web', 'zip', '.')")
+node make-update-json.mjs "$VERSION_CODE" gemfall-web.zip update.json
 npm ci --no-audit --no-fund
 rm -rf android
 npx cap add android

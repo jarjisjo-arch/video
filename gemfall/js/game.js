@@ -647,9 +647,11 @@ export class Game {
       }
     }
     if (this.moves <= 0) { this.failReason = 'moves'; this.finish(false); return; }
-    for (let tries = 0; tries < 6 && !this.findMove(); tries++) {
+    // stuck: shuffle twice, then let Digby break blockers until a move exists. Empty cells that can't refill
+    // mean a blocker is in the way, so skip the shuffles then. Blockers run out, so this always ends.
+    for (let tries = 0; tries < 30 && !this.findMove(); tries++) {
       await this.rd.wait(250);
-      if (tries < 2) await this.shuffleBoard();
+      if (tries < 2 && !this.hasEmptyCells()) await this.shuffleBoard();
       else await this.clearTheWay();
       await this.collapse();
       await this.resolve(null);
@@ -674,13 +676,20 @@ export class Game {
     sfx('creep'); this.hud();
     await this.rd.wait(380);
   }
+  hasEmptyCells() {
+    for (const row of this.grid) for (const cl of row) if (cl.playable && !cl.piece && !wall(cl)) return true;
+    return false;
+  }
   async clearTheWay() {
     // last resort when no move exists: Digby breaks the most central blocker for free
     const list = [];
     for (const row of this.grid) for (const cl of row) if (cl.playable && wall(cl)) list.push(cl);
     if (!list.length) { await this.shuffleBoard(); return; }
-    list.sort((a, b) => Math.hypot(a.r - 3.5, a.c - 3.5) - Math.hypot(b.r - 3.5, b.c - 3.5));
-    const t = list[0];
+    // first choice: a blocker with an empty cell under it, nearest the top, because it stops new gems falling in
+    const blocking = list.filter((cl) => { const below = this.cell(cl.r + 1, cl.c); return below && below.playable && !below.piece && !wall(below); });
+    if (blocking.length) blocking.sort((a, b) => a.r - b.r || Math.abs(a.c - 3.5) - Math.abs(b.c - 3.5));
+    else list.sort((a, b) => Math.hypot(a.r - 3.5, a.c - 3.5) - Math.hypot(b.r - 3.5, b.c - 3.5));
+    const t = (blocking.length ? blocking : list)[0];
     this.h.banner('Digby digs!');
     sfx('hammer'); this.rd.ring(t.r, t.c, 1.1, 1, 380);
     this.cascade = 1;
