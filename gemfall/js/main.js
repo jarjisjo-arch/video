@@ -132,10 +132,6 @@ $('modal').addEventListener('click', (e) => {
   else if (act === 'coach-ok') clearCoach(true);
   else if (act === 'update-restart') { closeModal(); if (updateNotice && updateNotice.restart) updateNotice.restart(); }
   else if (act === 'update-get') { if (updateNotice && updateNotice.url) window.location.href = updateNotice.url; }
-  else if (act === 'transfer') openTransfer();
-  else if (act === 'copy-code') copyCode(b);
-  else if (act === 'load-code') loadCode();
-  else if (act === 'load-confirm') applyLoadedSave();
   else if (act === 'sfx' || act === 'music') {
     save[act] = !save[act]; persist(); audio.setPrefs(save.sfx, save.music);
     b.setAttribute('aria-pressed', String(save[act])); syncSoundBtn();
@@ -166,7 +162,6 @@ function versionText() { return isApp ? `Gemfall app 1.${appVer || '?'}${appChan
 function openSettings() {
   modal(`${closeX}<h2 class="gold-title" style="margin-top: 6px">Settings</h2>${toggles()}${themePicker()}
     <div class="actions"><button class="btn btn-purple" data-act="close">Done</button>
-    <button class="btn btn-purple" data-act="transfer" style="font-size: 18px; height: 48px">Move my progress</button>
     <button class="btn btn-orange" data-act="reset" style="font-size: 18px; height: 48px">Reset progress</button></div>
     <div class="version">${versionText()}</div>`);
 }
@@ -778,66 +773,6 @@ const updateUi = {
   contentReady: (restart, notes) => { updateNotice = { kind: 'content', restart, notes }; showUpdateNotice(); }
 };
 
-// ---------- moving progress between phones or app versions ----------
-// The code is the saved progress, compressed and written in URL-safe base64: "GEM1-..." (or "GEM0-..." uncompressed).
-const b64url = (bytes) => { let bin = ''; bytes.forEach((x) => { bin += String.fromCharCode(x); }); return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
-const pipe = async (bytes, stream) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer());
-async function encodeSave() {
-  let bytes = new TextEncoder().encode(JSON.stringify(save)), tag = 'GEM0';
-  if (window.CompressionStream) { bytes = await pipe(bytes, new CompressionStream('deflate')); tag = 'GEM1'; }
-  return `${tag}-${b64url(bytes)}`;
-}
-async function decodeSave(code) {
-  const m = String(code).replace(/\s+/g, '').match(/^GEM([01])-([A-Za-z0-9_-]+)$/);
-  if (!m) throw new Error('That doesn’t look like a Gemfall progress code. It starts with GEM.');
-  const b64 = m[2].replace(/-/g, '+').replace(/_/g, '/');
-  let bytes = Uint8Array.from(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)), (ch) => ch.charCodeAt(0));
-  if (m[1] === '1') bytes = await pipe(bytes, new DecompressionStream('deflate'));
-  const data = JSON.parse(new TextDecoder().decode(bytes));
-  if (!data || typeof data !== 'object' || !Number.isInteger(data.unlocked) || typeof data.stars !== 'object') throw new Error('bad');
-  return data;
-}
-let pendingSave = null;
-async function openTransfer() {
-  modal(`${closeX}<h2 class="gold-title" style="margin: 6px 40px 0">Move my progress</h2>
-    <div class="meta">Copy this code, then paste it into Gemfall on another phone or after reinstalling. It holds your levels, stars, boosters and settings.</div>
-    <textarea class="code" id="myCode" readonly aria-label="Your progress code">Making your code…</textarea>
-    <div class="actions" style="margin-top: 8px"><button class="btn btn-green" data-act="copy-code">Copy code</button></div>
-    <div class="sub" style="margin-top: 18px">HAVE A CODE?</div>
-    <textarea class="code" id="theirCode" placeholder="Paste a progress code here" aria-label="Progress code to load"></textarea>
-    <div class="meta" id="codeMsg" role="status"></div>
-    <div class="actions" style="margin-top: 8px"><button class="btn btn-purple" data-act="load-code">Load progress</button></div>`);
-  try { $('myCode').value = await encodeSave(); } catch (e) { $('myCode').value = 'Couldn’t make a code on this device.'; }
-}
-async function copyCode(btn) {
-  const el = $('myCode');
-  try { await navigator.clipboard.writeText(el.value); btn.textContent = 'Copied!'; }
-  catch (e) { el.focus(); el.select(); btn.textContent = 'Selected: copy it'; }
-}
-async function loadCode() {
-  const msg = $('codeMsg');
-  try {
-    pendingSave = await decodeSave($('theirCode').value);
-    const stars = Object.values(pendingSave.stars || {}).reduce((a, x) => a + x, 0);
-    modal(`<img class="mascot" src="${A}mascot-oops.png" alt="">
-      <h2 class="gold-title">Replace your progress?</h2>
-      <div class="meta">The code has level ${pendingSave.unlocked} unlocked and ${stars} stars. Loading it replaces the progress on this phone.</div>
-      <div class="actions"><button class="btn btn-green" data-act="load-confirm">Yes, load it</button>
-      <button class="btn btn-purple" data-act="close">Cancel</button></div>`);
-  } catch (e) {
-    msg.textContent = e.message && e.message.startsWith('That') ? e.message : 'That code didn’t work. Check it was copied in full.';
-  }
-}
-function applyLoadedSave() {
-  if (!pendingSave) return;
-  save = Object.assign(defaults(), pendingSave);
-  pendingSave = null;
-  persist(); audio.setPrefs(save.sfx, save.music); applyTheme(save.theme);
-  closeModal(); openTitle();
-  modal(`<img class="mascot" src="${A}mascot-happy.png" alt=""><h2 class="gold-title">Progress loaded</h2>
-    <div class="actions"><button class="btn btn-green" data-act="close">Play</button></div>`);
-}
-
 // ---------- Android back button (app only): steps back through the game instead of quitting mid-level ----------
 let backArmed = false;
 function armBack() { if (isApp && !backArmed) { history.pushState({ gemfall: true }, ''); backArmed = true; } }
@@ -861,7 +796,7 @@ if (isApp) {
 window.__gemfall = {
   get game() { return game; }, startLevel, openMap, getLevel, get save() { return save; }, get rd() { return rd; },
   setLives(n, agoMs = 0) { save.lives = n; save.livesAt = n >= MAX_LIVES ? 0 : Date.now() - agoMs; persist(); renderLives(); },
-  applyTheme, showDaily, claimDaily, clearCoach, get coach() { return coach; }, updateUi, encodeSave, decodeSave
+  applyTheme, showDaily, claimDaily, clearCoach, get coach() { return coach; }, updateUi
 };
 
 (async () => {

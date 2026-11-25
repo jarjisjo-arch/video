@@ -26,7 +26,7 @@ The app is the same web game wrapped with [Capacitor](https://capacitorjs.com); 
 
 The signing key (`gemfall-android/gemfall-share.keystore`) is committed on purpose, so every build is signed the same way. That is fine for sharing with friends. Before publishing on Google Play, make a new private key and keep it out of the repository.
 
-**Google Play:** each build also makes `Gemfall-play.aab`, the bundle Google Play needs, signed with a private upload key kept in GitHub's secrets. The store icon, feature graphic, screenshots, listing text, privacy policy and a step-by-step launch checklist are in `../gemfall-android/play/` (start with `PLAY-LAUNCH.md`). Play installs are versioned `1.<build>-play`, so the game sends those players to Google Play rather than to the APK when an app update is needed. Players can move their progress between installs with Settings > Move my progress.
+**Google Play:** each build also makes `Gemfall-play.aab`, the bundle Google Play needs, signed with a private upload key kept in GitHub's secrets. The store icon, feature graphic, screenshots, listing text, privacy policy and a step-by-step launch checklist are in `../gemfall-android/play/` (start with `PLAY-LAUNCH.md`). Play installs are versioned `1.<build>-play`, so the game sends those players to Google Play rather than to the APK when an app update is needed.
 
 iPhones can't install APKs. iPhone players can use the web version and add it to the home screen from Safari's Share menu.
 

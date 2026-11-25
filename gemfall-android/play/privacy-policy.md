@@ -12,8 +12,6 @@ Nothing. Gemfall doesn't ask you to create an account, doesn't show ads, doesn't
 
 Your progress (unlocked levels, stars, scores, boosters, lives, daily streak and settings) is saved only on your device. Uninstalling Gemfall deletes it.
 
-If you use **Settings > Move my progress**, the progress code is made on your device and goes only where you paste or send it yourself.
-
 ## Internet use
 
 When the Android app starts, it checks for game updates by downloading a small file from GitHub, where Gemfall's files are hosted. When an update is available, it also downloads the new game content (levels, pictures and sounds) from GitHub. These requests carry no personal information about you. Like any website, GitHub receives standard connection details such as your IP address; GitHub handles them under the [GitHub General Privacy Statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement). If you installed Gemfall from Google Play, updates to the app itself come through Google Play under Google's privacy policy.

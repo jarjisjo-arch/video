@@ -12,7 +12,6 @@ Everything Play needs from the game is in this folder or built automatically. Th
 | Privacy policy | `privacy-policy.md`, published at https://github.com/jarjisjo-arch/video/blob/ccr-589b2a74-kj2uok/gemfall-android/play/privacy-policy.md |
 | Answers for every App content form | Step 5 below |
 | Update flow for Play players | The Play build is versioned `1.<build>-play`. New levels still arrive as live updates; "Update needed" and "New version available" send Play players to Google Play instead of the APK |
-| Moving progress from the shared APK | Settings > **Move my progress** |
 
 ## 1. Add the upload key to GitHub (5 minutes)
 
@@ -85,5 +84,4 @@ After 14 days with at least 12 testers, Play Console shows **Apply for productio
 - **New levels and fixes** still reach every player as live updates, with no Play review needed. Content updates must stay within what the listing describes (Google's rules for code that runs in a web view).
 - **App updates** (native changes such as a new plugin): upload the newest `Gemfall-play.aab` to Production. Each build has a higher version code, as Play requires.
 - **Forcing an update:** `forceAppBelow` in `update-policy.json` works for Play players too; their "Update needed" screen opens Gemfall's Google Play page.
-- **Players on the shared APK** can't install the Play version over it, because the two are signed with different keys. They should open Settings > **Move my progress** and copy the code, uninstall the APK, install from Google Play, then paste the code there.
-- Keep sharing the APK only for testing before release, so most players are on the Play version.
+- **The shared APK and the Play version are signed with different keys**, so one can't install over the other. To switch a phone (your own, for example), uninstall the APK first; its progress isn't carried over. After launch, share the Google Play link instead of the APK.
