@@ -325,9 +325,9 @@ function startLevel(i) {
   sizeBoard();
   $('lvlLabel').innerHTML = lv.endless ? `<img src="${A}ui-crown.png" alt="" style="width: 26px; vertical-align: -5px; margin-right: 4px">Level ${i + 1}` : `Level ${i + 1}`;
   $('digby').src = A + 'mascot-happy.png';
-  lastStars = 0; shownScore = 0; scoreTarget = 0; lastMoves = lv.moves;
+  lastStars = 0; shownScore = 0; scoreTarget = 0; lastMoves = lv.moves; scoreLen = -1;
   $('hudGoals').innerHTML = game.goals.map((g, k) => `<div class="goal" id="goal${k}"><img src="${goalIcon(g)}" alt=""><span></span><div class="check"></div></div>`).join('');
-  updateHUD(game); updateBoosters(); syncSoundBtn();
+  updateHUD(game); updateBoosters(); syncSoundBtn(); fitBoosters();
   game.busy = true;
   const all = game.allPieces();
   all.forEach(({ p, r }) => { p.y = r - game.R - 1; });
@@ -336,6 +336,12 @@ function startLevel(i) {
   });
   setTimeout(() => callout('Go!', true), 450);
 }
+// booster labels: if any would be cut off, show the icons alone
+function fitBoosters() {
+  const row = document.querySelector('#game .boosters');
+  row.classList.remove('compact');
+  if ([...row.querySelectorAll('.bl')].some((el) => el.scrollWidth > el.clientWidth + 1)) row.classList.add('compact');
+}
 function sizeBoard() {
   if (!rd) return;
   const w = $('boardWrap');
@@ -343,15 +349,25 @@ function sizeBoard() {
   rd.resize(Math.max(200, avail));
 }
 window.addEventListener('resize', () => {
-  if ($('game').classList.contains('active')) { sizeBoard(); if (coach) { clearCoach(); if (game && !game.busy) coachCheck(); } }
+  if ($('game').classList.contains('active')) { sizeBoard(); fitBoosters(); if (coach) { clearCoach(); if (game && !game.busy) coachCheck(); } }
   if ($('map').classList.contains('active')) buildMap();
 });
 
 let shownScore = 0, scoreTarget = 0, scoreRaf = 0, lastMoves = 0;
+// shrink the score's font when its digits would overflow the box (checked only when the length changes)
+let scoreLen = 0;
+function fitScore(el) {
+  if (el.textContent.length === scoreLen) return;
+  scoreLen = el.textContent.length;
+  el.style.fontSize = '';
+  let size = parseFloat(getComputedStyle(el).fontSize);
+  while (el.scrollWidth > el.clientWidth + 1 && size > 12) { size -= 1; el.style.fontSize = size + 'px'; }
+}
 function stepScore() {
   const d = scoreTarget - shownScore;
   shownScore = Math.abs(d) < 3 ? scoreTarget : shownScore + d * 0.16;
   $('hudScore').textContent = Math.round(shownScore).toLocaleString();
+  fitScore($('hudScore'));
   scoreRaf = shownScore === scoreTarget ? 0 : requestAnimationFrame(stepScore);
 }
 function updateHUD(g) {

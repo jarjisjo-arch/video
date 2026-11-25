@@ -369,8 +369,9 @@ export class Renderer {
       ctx.drawImage(this.img.chain, this.ox + c * cs + cs * 0.04 + jx, this.oy + r * cs + cs * 0.04, cs * 0.92, cs * 0.92);
       ctx.restore();
     }
-    // chest exits under the bottom row of each column
-    if (g.chestGoal > 0) {
+    // chest exits under the bottom row of each column, while chests are still to collect
+    const chestsLeft = g.goals.some((x) => x.type === 'chest' && x.left > 0);
+    if (chestsLeft) {
       const bob = Math.sin(t / 220) * cs * 0.04;
       for (let c = 0; c < this.C; c++) {
         let r = this.R - 1;

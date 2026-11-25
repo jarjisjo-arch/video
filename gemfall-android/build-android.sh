@@ -15,11 +15,31 @@ npx capacitor-assets generate --android \
   --iconBackgroundColor '#5411af' --iconBackgroundColorDark '#5411af' \
   --splashBackgroundColor '#1a1233' --splashBackgroundColorDark '#1a1233'
 
+# keep the game's text at 100% whatever the phone's font size setting: the layout is fixed, so larger
+# system text pushes the score and buttons off screen
+cat > android/app/src/main/java/com/gemfall/game/MainActivity.java <<'JAVA'
+package com.gemfall.game;
+
+import android.os.Bundle;
+import com.getcapacitor.BridgeActivity;
+
+public class MainActivity extends BridgeActivity {
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        if (getBridge() != null && getBridge().getWebView() != null) {
+            getBridge().getWebView().getSettings().setTextZoom(100);
+        }
+    }
+}
+JAVA
+
 # portrait only, and a version number that goes up with every build
 sed -i 's|android:name=".MainActivity"|android:name=".MainActivity"\n            android:screenOrientation="portrait"|' android/app/src/main/AndroidManifest.xml
 sed -i "s/versionCode 1\$/versionCode ${VERSION_CODE}/; s/versionName \"1.0\"/versionName \"1.${VERSION_CODE}\"/" android/app/build.gradle
 grep -q 'screenOrientation="portrait"' android/app/src/main/AndroidManifest.xml
 grep -q "versionCode ${VERSION_CODE}\$" android/app/build.gradle
+grep -q 'setTextZoom(100)' android/app/src/main/java/com/gemfall/game/MainActivity.java
 
 [ "${SKIP_GRADLE:-}" = 1 ] && { echo "Android project ready (Gradle skipped)"; exit 0; }
 
