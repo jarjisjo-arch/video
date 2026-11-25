@@ -36,6 +36,9 @@ jobs:
         env:
           VERSION_CODE: ${{ github.run_number }}
           RELEASE_BASE: https://github.com/${{ github.repository }}/releases/download/gemfall-latest
+          # private Google Play upload key (repository secrets); the Play bundle stays unsigned without them
+          PLAY_UPLOAD_KEYSTORE: ${{ secrets.PLAY_UPLOAD_KEYSTORE }}
+          PLAY_UPLOAD_PASSWORD: ${{ secrets.PLAY_UPLOAD_PASSWORD }}
         run: ./build-android.sh
 
       - uses: actions/upload-artifact@v4
@@ -43,6 +46,7 @@ jobs:
           name: Gemfall-apk
           path: |
             gemfall-android/Gemfall.apk
+            gemfall-android/Gemfall-play*.aab
             gemfall-android/gemfall-web.zip
             gemfall-android/update.json
 
@@ -59,4 +63,6 @@ jobs:
           fi
           # the app and the content first, then update.json, so the manifest never points at files not uploaded yet
           gh release upload gemfall-latest gemfall-android/Gemfall.apk gemfall-android/gemfall-web.zip --clobber
+          # the signed Google Play bundle, when the upload key is set up
+          if [ -f gemfall-android/Gemfall-play.aab ]; then gh release upload gemfall-latest gemfall-android/Gemfall-play.aab --clobber; fi
           gh release upload gemfall-latest gemfall-android/update.json --clobber

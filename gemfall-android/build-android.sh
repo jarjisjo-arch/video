@@ -66,3 +66,24 @@ BT=$(ls -d "${ANDROID_HOME:-$ANDROID_SDK_ROOT}"/build-tools/* | sort -V | tail -
 grep -q "v1 scheme (JAR signing): true" verify.txt
 grep -q "v2 scheme (APK Signature Scheme v2): true" verify.txt
 ls -l ../Gemfall.apk
+
+# ---- Google Play: an App Bundle with version name "1.<build>-play", so the game knows to send players
+# to Google Play for app updates. Google re-signs it; we sign it with the private upload key, which comes
+# from GitHub secrets (never from the repository). Without the key the bundle is built but left unsigned.
+sed -i "s/versionName \"1.${VERSION_CODE}\"/versionName \"1.${VERSION_CODE}-play\"/" app/build.gradle
+grep -q "versionName \"1.${VERSION_CODE}-play\"" app/build.gradle
+./gradlew --no-daemon bundleRelease
+AAB=app/build/outputs/bundle/release/app-release.aab
+rm -f ../Gemfall-play.aab ../Gemfall-play-unsigned.aab
+if [ -n "${PLAY_UPLOAD_KEYSTORE:-}" ] && [ -n "${PLAY_UPLOAD_PASSWORD:-}" ]; then
+  KS="$(mktemp)"
+  echo "$PLAY_UPLOAD_KEYSTORE" | base64 -d > "$KS"
+  jarsigner -sigalg SHA256withRSA -digestalg SHA-256 -keystore "$KS" -storepass:env PLAY_UPLOAD_PASSWORD -keypass:env PLAY_UPLOAD_PASSWORD \
+    -signedjar ../Gemfall-play.aab "$AAB" upload
+  rm -f "$KS"
+  jarsigner -verify ../Gemfall-play.aab | grep -q "jar verified"
+  ls -l ../Gemfall-play.aab
+else
+  cp "$AAB" ../Gemfall-play-unsigned.aab
+  echo "No Play upload key in this build (secrets PLAY_UPLOAD_KEYSTORE and PLAY_UPLOAD_PASSWORD): Gemfall-play-unsigned.aab can't be uploaded to Google Play."
+fi

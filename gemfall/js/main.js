@@ -4,7 +4,7 @@ import { Renderer } from './render.js';
 import { Game } from './game.js';
 import * as audio from './audio.js';
 import { BUILD } from './build-info.js';
-import { isApp, appReady, appBuild, checkForUpdates } from './updates.js';
+import { isApp, appReady, appInfo, checkForUpdates } from './updates.js';
 
 // tell the updater straight away that this version of the game started, so it isn't rolled back
 appReady();
@@ -132,6 +132,10 @@ $('modal').addEventListener('click', (e) => {
   else if (act === 'coach-ok') clearCoach(true);
   else if (act === 'update-restart') { closeModal(); if (updateNotice && updateNotice.restart) updateNotice.restart(); }
   else if (act === 'update-get') { if (updateNotice && updateNotice.url) window.location.href = updateNotice.url; }
+  else if (act === 'transfer') openTransfer();
+  else if (act === 'copy-code') copyCode(b);
+  else if (act === 'load-code') loadCode();
+  else if (act === 'load-confirm') applyLoadedSave();
   else if (act === 'sfx' || act === 'music') {
     save[act] = !save[act]; persist(); audio.setPrefs(save.sfx, save.music);
     b.setAttribute('aria-pressed', String(save[act])); syncSoundBtn();
@@ -158,10 +162,11 @@ async function applyTheme(id) {
   $('gameBg').src = A + THEMES[id].bg;
   if ($('map').classList.contains('active')) buildMap(false);
 }
-function versionText() { return isApp ? `Gemfall app 1.${appVer || '?'} · game content ${BUILD.number}` : 'Gemfall web version'; }
+function versionText() { return isApp ? `Gemfall app 1.${appVer || '?'}${appChannel === 'play' ? ' (Google Play)' : ''} · game content ${BUILD.number}` : 'Gemfall web version'; }
 function openSettings() {
   modal(`${closeX}<h2 class="gold-title" style="margin-top: 6px">Settings</h2>${toggles()}${themePicker()}
     <div class="actions"><button class="btn btn-purple" data-act="close">Done</button>
+    <button class="btn btn-purple" data-act="transfer" style="font-size: 18px; height: 48px">Move my progress</button>
     <button class="btn btn-orange" data-act="reset" style="font-size: 18px; height: 48px">Reset progress</button></div>
     <div class="version">${versionText()}</div>`);
 }
@@ -199,7 +204,7 @@ function openMap() {
   clearTimeout(endTimer);
   closeModal(); clearCoach();
   if (game) { game.destroy(); }
-  show('map'); buildMap(); renderLives(); renderStreak();
+  show('map'); buildMap(); renderLives(); renderStreak(); armBack();
   audio.setTrack('menu');
   if (!dailyState().claimed) setTimeout(() => { if ($('map').classList.contains('active') && $('overlay').classList.contains('hidden')) showDaily(); }, 550);
   setTimeout(showUpdateNotice, 900);
@@ -326,7 +331,7 @@ function startLevel(i) {
   current = i;
   if (game) game.destroy();
   clearCoach();
-  show('game');
+  show('game'); armBack();
   audio.setTrack(trackFor(i + 1));
   setHammer(false);
   const lv = getLevel(i + 1);
@@ -727,7 +732,7 @@ function claimDaily() {
 $('mapDaily').addEventListener('click', () => { audio.unlock(); audio.sfx('click'); showDaily(); });
 
 // ---------- updates (Android app only; see updates.js) ----------
-let appVer = 0, updateNotice = null;
+let appVer = 0, appChannel = 'web', updateNotice = null;
 function showUpdateNotice() {
   const n = updateNotice;
   if (!n || n.shown) return;
@@ -743,38 +748,120 @@ function showUpdateNotice() {
       <div class="meta" style="font-size: 13px">It also switches over by itself the next time you close Gemfall.</div>`);
     if (n.notes) $('modal').querySelector('.meta').textContent = n.notes;
   } else {
+    const play = n.channel === 'play';
     modal(`${closeX}<img class="mascot" src="${A}ui-gift.png" alt="" style="height: 110px">
       <h2 class="gold-title">New version available</h2>
       <div class="meta"></div>
-      <div class="actions"><button class="btn btn-green" data-act="update-get">Download it</button>
+      <div class="actions"><button class="btn btn-green" data-act="update-get">${play ? 'Update on Google Play' : 'Download it'}</button>
       <button class="btn btn-purple" data-act="close">Later</button></div>
-      <div class="meta" style="font-size: 13px">Open the downloaded file to install it. Your progress is kept.</div>`);
+      <div class="meta" style="font-size: 13px">${play ? 'Your progress is kept.' : 'Open the downloaded file to install it. Your progress is kept.'}</div>`);
     $('modal').querySelector('.meta').textContent = n.message || 'A newer version of Gemfall is ready to install. It brings things this version can\u2019t get as a quick update.';
   }
 }
-function showForceUpdate(url, message, applying = false) {
+function showForceUpdate(url, message, applying = false, channel = 'github') {
   const el = $('forceUpdate');
   el.querySelector('h2').textContent = applying ? 'Updating Gemfall' : 'Update needed';
   el.querySelector('.msg').textContent = applying ? 'Getting the latest version. This only takes a moment.'
     : (message || 'This version of Gemfall needs an important fix. Download the new version to keep playing.');
   const btn = el.querySelector('button');
   btn.hidden = applying || !url;
+  btn.textContent = channel === 'play' ? 'Update on Google Play' : 'Download update';
   btn.onclick = () => { window.location.href = url; };
+  el.querySelector('.hint').textContent = channel === 'play' ? 'Your progress is kept.' : 'Open the downloaded file to install it. Your progress is kept.';
   el.querySelector('.hint').hidden = applying;
   el.classList.remove('hidden');
 }
 const updateUi = {
-  forceApp: (url, message) => showForceUpdate(url, message),
+  forceApp: (url, message, channel) => showForceUpdate(url, message, false, channel),
   contentApplying: () => showForceUpdate(null, '', true),
-  suggestApp: (url, message) => { updateNotice = { kind: 'app', url, message }; showUpdateNotice(); },
+  suggestApp: (url, message, channel) => { updateNotice = { kind: 'app', url, message, channel }; showUpdateNotice(); },
   contentReady: (restart, notes) => { updateNotice = { kind: 'content', restart, notes }; showUpdateNotice(); }
 };
+
+// ---------- moving progress between phones or app versions ----------
+// The code is the saved progress, compressed and written in URL-safe base64: "GEM1-..." (or "GEM0-..." uncompressed).
+const b64url = (bytes) => { let bin = ''; bytes.forEach((x) => { bin += String.fromCharCode(x); }); return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+const pipe = async (bytes, stream) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer());
+async function encodeSave() {
+  let bytes = new TextEncoder().encode(JSON.stringify(save)), tag = 'GEM0';
+  if (window.CompressionStream) { bytes = await pipe(bytes, new CompressionStream('deflate')); tag = 'GEM1'; }
+  return `${tag}-${b64url(bytes)}`;
+}
+async function decodeSave(code) {
+  const m = String(code).replace(/\s+/g, '').match(/^GEM([01])-([A-Za-z0-9_-]+)$/);
+  if (!m) throw new Error('That doesn’t look like a Gemfall progress code. It starts with GEM.');
+  const b64 = m[2].replace(/-/g, '+').replace(/_/g, '/');
+  let bytes = Uint8Array.from(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)), (ch) => ch.charCodeAt(0));
+  if (m[1] === '1') bytes = await pipe(bytes, new DecompressionStream('deflate'));
+  const data = JSON.parse(new TextDecoder().decode(bytes));
+  if (!data || typeof data !== 'object' || !Number.isInteger(data.unlocked) || typeof data.stars !== 'object') throw new Error('bad');
+  return data;
+}
+let pendingSave = null;
+async function openTransfer() {
+  modal(`${closeX}<h2 class="gold-title" style="margin: 6px 40px 0">Move my progress</h2>
+    <div class="meta">Copy this code, then paste it into Gemfall on another phone or after reinstalling. It holds your levels, stars, boosters and settings.</div>
+    <textarea class="code" id="myCode" readonly aria-label="Your progress code">Making your code…</textarea>
+    <div class="actions" style="margin-top: 8px"><button class="btn btn-green" data-act="copy-code">Copy code</button></div>
+    <div class="sub" style="margin-top: 18px">HAVE A CODE?</div>
+    <textarea class="code" id="theirCode" placeholder="Paste a progress code here" aria-label="Progress code to load"></textarea>
+    <div class="meta" id="codeMsg" role="status"></div>
+    <div class="actions" style="margin-top: 8px"><button class="btn btn-purple" data-act="load-code">Load progress</button></div>`);
+  try { $('myCode').value = await encodeSave(); } catch (e) { $('myCode').value = 'Couldn’t make a code on this device.'; }
+}
+async function copyCode(btn) {
+  const el = $('myCode');
+  try { await navigator.clipboard.writeText(el.value); btn.textContent = 'Copied!'; }
+  catch (e) { el.focus(); el.select(); btn.textContent = 'Selected: copy it'; }
+}
+async function loadCode() {
+  const msg = $('codeMsg');
+  try {
+    pendingSave = await decodeSave($('theirCode').value);
+    const stars = Object.values(pendingSave.stars || {}).reduce((a, x) => a + x, 0);
+    modal(`<img class="mascot" src="${A}mascot-oops.png" alt="">
+      <h2 class="gold-title">Replace your progress?</h2>
+      <div class="meta">The code has level ${pendingSave.unlocked} unlocked and ${stars} stars. Loading it replaces the progress on this phone.</div>
+      <div class="actions"><button class="btn btn-green" data-act="load-confirm">Yes, load it</button>
+      <button class="btn btn-purple" data-act="close">Cancel</button></div>`);
+  } catch (e) {
+    msg.textContent = e.message && e.message.startsWith('That') ? e.message : 'That code didn’t work. Check it was copied in full.';
+  }
+}
+function applyLoadedSave() {
+  if (!pendingSave) return;
+  save = Object.assign(defaults(), pendingSave);
+  pendingSave = null;
+  persist(); audio.setPrefs(save.sfx, save.music); applyTheme(save.theme);
+  closeModal(); openTitle();
+  modal(`<img class="mascot" src="${A}mascot-happy.png" alt=""><h2 class="gold-title">Progress loaded</h2>
+    <div class="actions"><button class="btn btn-green" data-act="close">Play</button></div>`);
+}
+
+// ---------- Android back button (app only): steps back through the game instead of quitting mid-level ----------
+let backArmed = false;
+function armBack() { if (isApp && !backArmed) { history.pushState({ gemfall: true }, ''); backArmed = true; } }
+if (isApp) {
+  window.addEventListener('popstate', () => {
+    backArmed = false;
+    const here = $('app').dataset.screen;
+    if (!$('forceUpdate').classList.contains('hidden')) { armBack(); return; }
+    if (!$('overlay').classList.contains('hidden')) {
+      const close = $('modal').querySelector('[data-act="close"], [data-act="resume"]');
+      const toMap = $('modal').querySelector('[data-act="map"]');
+      if (close) closeModal(); else if (toMap) toMap.click();
+      armBack(); return;
+    }
+    if (here === 'game') { $('pauseBtn').click(); armBack(); return; }
+    if (here === 'map') { openTitle(); return; } // from the title screen, Back leaves the app
+  });
+}
 
 // debugging and automated tests
 window.__gemfall = {
   get game() { return game; }, startLevel, openMap, getLevel, get save() { return save; }, get rd() { return rd; },
   setLives(n, agoMs = 0) { save.lives = n; save.livesAt = n >= MAX_LIVES ? 0 : Date.now() - agoMs; persist(); renderLives(); },
-  applyTheme, showDaily, claimDaily, clearCoach, get coach() { return coach; }, updateUi
+  applyTheme, showDaily, claimDaily, clearCoach, get coach() { return coach; }, updateUi, encodeSave, decodeSave
 };
 
 (async () => {
@@ -785,6 +872,6 @@ window.__gemfall = {
   $('loading').classList.add('hidden');
   syncLives();
   openTitle();
-  appBuild().then((v) => { appVer = v; });
+  appInfo().then((i) => { appVer = i.build; appChannel = i.channel; });
   checkForUpdates(updateUi);
 })();

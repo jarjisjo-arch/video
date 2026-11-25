@@ -17,15 +17,17 @@ export function appReady() {
   if (isApp) call('CapacitorUpdater', 'notifyAppReady').catch(() => {});
 }
 
-// The installed app's build number. Its version name is "1.<build>".
-export async function appBuild() {
-  if (!isApp) return 0;
+// The installed app: its build number and where it came from. The version name is "1.<build>" for the
+// APK shared from GitHub and "1.<build>-play" for the Google Play build.
+export async function appInfo() {
+  if (!isApp) return { build: 0, channel: 'web' };
   try {
-    const cur = await call('CapacitorUpdater', 'current');
-    const n = parseInt(String(cur.native || '').split('.')[1], 10);
-    return Number.isFinite(n) ? n : 0;
-  } catch (e) { return 0; }
+    const name = String((await call('CapacitorUpdater', 'current')).native || '');
+    const n = parseInt(name.split('.')[1], 10);
+    return { build: Number.isFinite(n) ? n : 0, channel: /play/i.test(name) ? 'play' : 'github' };
+  } catch (e) { return { build: 0, channel: 'github' }; }
 }
+export async function appBuild() { return (await appInfo()).build; }
 
 async function fetchManifest() {
   // native request: GitHub's release downloads don't allow requests from web pages
@@ -46,15 +48,16 @@ export function decide(m, app, content) {
   return { action: content < (m.forceContentBelow || 0) ? 'contentNow' : 'content' };
 }
 
-// ui: { forceApp(url, message), suggestApp(url, message), contentReady(restart, notes), contentApplying() }
+// ui: { forceApp(url, message, channel), suggestApp(url, message, channel), contentReady(restart, notes), contentApplying() }
 export async function checkForUpdates(ui) {
   if (!isApp) return;
-  let m, app;
-  try { [m, app] = await Promise.all([fetchManifest(), appBuild()]); } catch (e) { return; /* offline: try next launch */ }
-  const d = decide(m, app, BUILD.number);
-  const apk = m.apk && m.apk.url;
-  if (d.action === 'forceApp') { ui.forceApp(apk, m.message); return; }
-  if (d.action === 'suggestApp') { if (apk) ui.suggestApp(apk, m.message); return; }
+  let m, info;
+  try { [m, info] = await Promise.all([fetchManifest(), appInfo()]); } catch (e) { return; /* offline: try next launch */ }
+  const d = decide(m, info.build, BUILD.number);
+  // a Google Play install must update through Google Play, never from a downloaded APK
+  const store = info.channel === 'play' ? (m.play && m.play.url) : (m.apk && m.apk.url);
+  if (d.action === 'forceApp') { ui.forceApp(store, m.message, info.channel); return; }
+  if (d.action === 'suggestApp') { if (store) ui.suggestApp(store, m.message, info.channel); return; }
   if (d.action === 'none') return;
   try {
     const version = String(m.content.build);
