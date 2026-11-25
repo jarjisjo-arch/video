@@ -351,7 +351,7 @@ export const LEVELS = [
     tip: 'Welcome to the Golden Vault! Treasure chests everywhere. Clear a way down for them.'
   },
   {
-    moves: 22, colors: 5, layout: FULL,
+    moves: 19, colors: 5, layout: FULL,
     goals: [{ type: 'collect', color: 1, target: 32 }]
   },
   {
@@ -361,8 +361,8 @@ export const LEVELS = [
     tip: 'The vault doors are chained shut. Snap every chain!'
   },
   {
-    moves: 24, colors: 5, bombs: { rate: 0.04, fuse: 11 }, stars: [10000, 15000, 21000], layout: FULL,
-    goals: [{ type: 'score', target: 10000 }]
+    moves: 24, colors: 5, bombs: { rate: 0.04, fuse: 12 }, stars: [8000, 13000, 19000], layout: FULL,
+    goals: [{ type: 'score', target: 8000 }]
   },
   {
     moves: 34, colors: 5,
@@ -380,19 +380,19 @@ export const LEVELS = [
     goals: [{ type: 'crystal' }, { type: 'chest', target: 3 }]
   },
   {
-    moves: 31, colors: 5, bombs: { rate: 0.03, fuse: 12 },
+    moves: 29, colors: 5, bombs: { rate: 0.03, fuse: 12 },
     layout: ['l......l', '.l....l.', '........', '........', '........', '........', '.l....l.', 'l......l'],
     goals: [{ type: 'collect', color: 1, target: 22 }, { type: 'collect', color: 4, target: 22 }, { type: 'lock' }]
   },
   {
-    moves: 36, colors: 5,
+    moves: 38, colors: 5,
     layout: ['kk....kk', 'kSS..SSk', '.S.cc.S.', '...cc...', '...cc...', '.S.cc.S.', 'kSS..SSk', 'kk....kk'],
     goals: [{ type: 'lock' }, { type: 'ice' }, { type: 'stone' }, { type: 'crystal' }],
     tip: 'The vault\'s treasure room. Every trick you know!'
   },
   // ---------- Overgrown Temple ----------
   {
-    moves: 21, colors: 5,
+    moves: 15, colors: 5,
     layout: ['........', '........', '........', 'cccccccc', '........', '........', '........', '........'],
     goals: [{ type: 'crystal' }],
     tip: 'In the Overgrown Temple, crystal grows like vines. Break some every turn!'
@@ -418,7 +418,7 @@ export const LEVELS = [
     goals: [{ type: 'collect', color: 2, target: 25 }, { type: 'collect', color: 5, target: 20 }]
   },
   {
-    moves: 30, colors: 5,
+    moves: 32, colors: 5,
     layout: ['k.k..k.k', '.k....k.', 'k.k..k.k', '........', '........', 'k.k..k.k', '.k....k.', 'k.k..k.k'],
     goals: [{ type: 'lock' }, { type: 'ice' }]
   },
