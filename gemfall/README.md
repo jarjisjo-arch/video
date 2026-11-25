@@ -90,9 +90,10 @@ Progress, stars, streak and settings are saved on the device (the browser's loca
 | `js/game.js` | Game rules: matching, special gems and combos, obstacles, gravity, goals, Gem Rush |
 | `js/render.js` | Canvas drawing, animations, particles, beams and explosions |
 | `js/levels.js` | The 60 level layouts, goals, move limits and star scores, plus the Endless Dig level generator |
-| `js/audio.js` | Sound effects and the music tracks (menu, one per area, Endless), generated in the browser with Web Audio |
+| `js/audio.js` | Sound effects (recorded clips for the main moments, synthesized ones for the rest and as a fallback) and the music tracks (menu, one per area, Endless), played with Web Audio |
 | `assets/` | Game art |
 | `fonts/` | The Lilita One and Nunito fonts, bundled so the game works offline |
+| `assets/sfx/` | Recorded sound effects and jingles (MP3) |
 
 ### Adding a level
 
@@ -115,5 +116,7 @@ Move counts were tuned by having a bot play every level several times; most leve
 ## Art
 
 The gems, fruit and space pieces, special gems, items, obstacles, icons, backgrounds, the eight world maps, Digby, the logo and the app icon were generated with Figma's AI image generator for this project. The originals are in the "Gemfall game art" Figma file.
+
+The sound effects and jingles in `assets/sfx/` come from Kenney's [Interface Sounds](https://kenney.nl/assets/interface-sounds), [Impact Sounds](https://kenney.nl/assets/impact-sounds) and [Music Jingles](https://kenney.nl/assets/music-jingles) packs, released under CC0 (public domain). They were trimmed, normalised and converted to MP3; the license is in `assets/sfx/License-Kenney.txt`. To swap a sound, change its entry in `BANK` in `js/audio.js`.
 
 The fonts are [Lilita One](https://fonts.google.com/specimen/Lilita+One) and [Nunito](https://fonts.google.com/specimen/Nunito), both under the SIL Open Font License.
