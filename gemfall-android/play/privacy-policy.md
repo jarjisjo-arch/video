@@ -1,6 +1,6 @@
 # Gemfinity privacy policy
 
-Last updated: 27 November 2026
+Last updated: 26 November 2026
 
 Gemfinity is a match-3 puzzle game. This policy explains what happens to information when you play it.
 
