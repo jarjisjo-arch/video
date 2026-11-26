@@ -30,4 +30,4 @@ If this policy changes, the new version will be posted at this address with a ne
 
 ## Contact
 
-Questions about this policy: REPLACE-WITH-CONTACT-EMAIL
+Questions about this policy: jarjisjo@gmail.com

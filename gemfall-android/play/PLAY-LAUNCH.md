@@ -41,7 +41,7 @@ The package name is `com.gemfinity.game` and is fixed once the first bundle is u
 
 ## 4. Store listing
 
-Copy the text from `store-listing.md` and upload the graphics from this folder (**Grow users > Store presence > Main store listing**). Add a contact email; the privacy policy needs the same address in place of `REPLACE-WITH-CONTACT-EMAIL`.
+Copy the text from `store-listing.md` and upload the graphics from this folder (**Grow users > Store presence > Main store listing**). Contact email: jarjisjo@gmail.com (the same address is in the privacy policy).
 
 ## 5. App content forms
 

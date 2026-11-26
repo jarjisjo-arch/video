@@ -60,5 +60,5 @@ Welcome to Gemfinity! 81 levels across 9 worlds, the Endless Dig, three board st
 - **App or game:** Game. **Category:** Puzzle.
 - **Tags** (pick up to 5 in Play Console): Match 3, Puzzle, Casual, Offline, Single player.
 - **Price:** Free. **Contains ads:** No. **In-app purchases:** No.
-- **Contact email** (shown on the listing): the address you choose; the same one goes in the privacy policy.
+- **Contact email** (shown on the listing): jarjisjo@gmail.com, the same address as in the privacy policy.
 - **Privacy policy URL:** https://github.com/jarjisjo-arch/video/blob/ccr-589b2a74-kj2uok/gemfall-android/play/privacy-policy.md
