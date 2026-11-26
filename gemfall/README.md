@@ -1,4 +1,4 @@
-# Gemfall
+# Gemfinity
 
 A match-3 puzzle game set in a glowing crystal mine. Swap gems, set off special gems, and dig down through 81 levels across 9 worlds with Digby the mole miner, then keep going in the never-ending Endless Dig.
 
@@ -18,7 +18,7 @@ Opening `index.html` straight from the file system will not work, because browse
 
 Every push that changes the game builds an Android app (APK) on GitHub Actions and attaches it to the **gemfall-latest** release:
 
-`https://github.com/jarjisjo-arch/video/releases/download/gemfall-latest/Gemfall.apk`
+`https://github.com/jarjisjo-arch/video/releases/download/gemfall-latest/Gemfinity.apk`
 
 Open that link on an Android phone, download the file, open it and allow installs from your browser when Android asks. To share the game, send the same link (or the APK file itself). A newer APK installs over the old one and keeps your progress, because every build is signed with the same key.
 
@@ -26,13 +26,13 @@ The app is the same web game wrapped with [Capacitor](https://capacitorjs.com); 
 
 The signing key (`gemfall-android/gemfall-share.keystore`) is committed on purpose, so every build is signed the same way. That is fine for sharing with friends. Before publishing on Google Play, make a new private key and keep it out of the repository.
 
-**Google Play:** each build also makes `Gemfall-play.aab`, the bundle Google Play needs, signed with a private upload key kept in GitHub's secrets. The store icon, feature graphic, screenshots, listing text, privacy policy and a step-by-step launch checklist are in `../gemfall-android/play/` (start with `PLAY-LAUNCH.md`). Play installs are versioned `1.<build>-play`, so the game sends those players to Google Play rather than to the APK when an app update is needed.
+**Google Play:** each build also makes `Gemfinity-play.aab`, the bundle Google Play needs, signed with a private upload key kept in GitHub's secrets. The store icon, feature graphic, screenshots, listing text, privacy policy and a step-by-step launch checklist are in `../gemfall-android/play/` (start with `PLAY-LAUNCH.md`). Play installs are versioned `1.<build>-play`, so the game sends those players to Google Play rather than to the APK when an app update is needed.
 
 iPhones can't install APKs. iPhone players can use the web version and add it to the home screen from Safari's Share menu.
 
 ### Shipping updates
 
-Every build publishes three files to the **gemfall-latest** release: `Gemfall.apk`, `gemfall-web.zip` (the game itself: code, levels, art and sounds) and `update.json`, which describes the newest build. The Android app (version 1.6 and later) reads `update.json` each time it starts:
+Every build publishes three files to the **gemfall-latest** release: `Gemfinity.apk`, `gemfall-web.zip` (the game itself: code, levels, art and sounds) and `update.json`, which describes the newest build. The Android app (version 1.6 and later) reads `update.json` each time it starts:
 
 - **New levels and fixes arrive by themselves.** If the game content is newer than the player's, the app downloads `gemfall-web.zip` in the background (checked against its SHA-256) and shows an "Update ready" pop-up on the title or map screen. The new content takes over when the player taps **Restart now**, or the next time they close the app. If the new content fails to start, the app goes back to the previous version on its own. So to add levels, edit `js/levels.js` (and add a map in `WORLD_MAPS` for a new world) and push: nobody needs to reinstall.
 - **Forcing an update.** Edit `gemfall-android/update-policy.json` and push:
@@ -135,7 +135,7 @@ Move counts were tuned by having a bot play every level several times; most leve
 
 ## Art
 
-The gems, fruit and space pieces, special gems, items, obstacles, icons, backgrounds, the eight world maps, Digby, the logo and the app icon were generated with Figma's AI image generator for this project. The originals are in the "Gemfall game art" Figma file.
+The gems, fruit and space pieces, special gems, items, obstacles, icons, backgrounds, the eight world maps, Digby, the logo and the app icon were generated with Figma's AI image generator for this project. The originals are in the "Gemfinity game art" Figma file.
 
 The sound effects and jingles in `assets/sfx/` come from Kenney's [Interface Sounds](https://kenney.nl/assets/interface-sounds), [Impact Sounds](https://kenney.nl/assets/impact-sounds) and [Music Jingles](https://kenney.nl/assets/music-jingles) packs, released under CC0 (public domain). They were trimmed, normalised and converted to MP3; the license is in `assets/sfx/License-Kenney.txt`.
 

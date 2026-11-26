@@ -1,4 +1,4 @@
-// Gemfall app controller: screens, level map, lives, HUD, input, overlays, boosters and saved progress.
+// Gemfinity app controller: screens, level map, lives, HUD, input, overlays, boosters and saved progress.
 import { LEVELS, WORLDS, mapFor, getLevel, layoutCount } from './levels.js';
 import { Renderer } from './render.js';
 import { Game } from './game.js';
@@ -158,7 +158,7 @@ async function applyTheme(id) {
   $('gameBg').src = A + THEMES[id].bg;
   if ($('map').classList.contains('active')) buildMap(false);
 }
-function versionText() { return isApp ? `Gemfall app 1.${appVer || '?'}${appChannel === 'play' ? ' (Google Play)' : ''} · game content ${BUILD.number}` : 'Gemfall web version'; }
+function versionText() { return isApp ? `Gemfinity app 1.${appVer || '?'}${appChannel === 'play' ? ' (Google Play)' : ''} · game content ${BUILD.number}` : 'Gemfinity web version'; }
 function openSettings() {
   modal(`${closeX}<h2 class="gold-title" style="margin-top: 6px">Settings</h2>${toggles()}${themePicker()}
     <div class="actions"><button class="btn btn-purple" data-act="close">Done</button>
@@ -740,7 +740,7 @@ function showUpdateNotice() {
       <div class="meta">${n.notes ? '' : 'New levels and improvements have downloaded.'}</div>
       <div class="actions"><button class="btn btn-green" data-act="update-restart">Restart now</button>
       <button class="btn btn-purple" data-act="close">Later</button></div>
-      <div class="meta" style="font-size: 13px">It also switches over by itself the next time you close Gemfall.</div>`);
+      <div class="meta" style="font-size: 13px">It also switches over by itself the next time you close Gemfinity.</div>`);
     if (n.notes) $('modal').querySelector('.meta').textContent = n.notes;
   } else {
     const play = n.channel === 'play';
@@ -750,14 +750,14 @@ function showUpdateNotice() {
       <div class="actions"><button class="btn btn-green" data-act="update-get">${play ? 'Update on Google Play' : 'Download it'}</button>
       <button class="btn btn-purple" data-act="close">Later</button></div>
       <div class="meta" style="font-size: 13px">${play ? 'Your progress is kept.' : 'Open the downloaded file to install it. Your progress is kept.'}</div>`);
-    $('modal').querySelector('.meta').textContent = n.message || 'A newer version of Gemfall is ready to install. It brings things this version can\u2019t get as a quick update.';
+    $('modal').querySelector('.meta').textContent = n.message || 'A newer version of Gemfinity is ready to install. It brings things this version can\u2019t get as a quick update.';
   }
 }
 function showForceUpdate(url, message, applying = false, channel = 'github') {
   const el = $('forceUpdate');
-  el.querySelector('h2').textContent = applying ? 'Updating Gemfall' : 'Update needed';
+  el.querySelector('h2').textContent = applying ? 'Updating Gemfinity' : 'Update needed';
   el.querySelector('.msg').textContent = applying ? 'Getting the latest version. This only takes a moment.'
-    : (message || 'This version of Gemfall needs an important fix. Download the new version to keep playing.');
+    : (message || 'This version of Gemfinity needs an important fix. Download the new version to keep playing.');
   const btn = el.querySelector('button');
   btn.hidden = applying || !url;
   btn.textContent = channel === 'play' ? 'Update on Google Play' : 'Download update';

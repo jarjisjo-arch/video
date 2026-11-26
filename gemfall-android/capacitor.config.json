@@ -1,6 +1,6 @@
 {
-  "appId": "com.gemfall.game",
-  "appName": "Gemfall",
+  "appId": "com.gemfinity.game",
+  "appName": "Gemfinity",
   "webDir": "www",
   "backgroundColor": "#1a1233",
   "android": {

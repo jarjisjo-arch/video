@@ -1,11 +1,11 @@
-# Gemfall: Google Play store listing
+# Gemfinity: Google Play store listing
 
 Copy each part into Play Console (Grow users > Store presence > Main store listing). The limits are Google's.
 
-## App name (25/30 characters)
+## App name (27/30 characters)
 
 ```
-Gemfall: Gem Match Puzzle
+Gemfinity: Gem Match Puzzle
 ```
 
 ## Short description (78/80 characters)
@@ -44,7 +44,7 @@ PLAY YOUR WAY
 ## Release notes for the first release (102/500 characters)
 
 ```
-Welcome to Gemfall! 81 levels across 9 worlds, the Endless Dig, three board styles and daily treasure.
+Welcome to Gemfinity! 81 levels across 9 worlds, the Endless Dig, three board styles and daily treasure.
 ```
 
 ## Graphics (all in this folder)

@@ -14,7 +14,7 @@ const manifest = {
   build: n,
   // newer game content that apps at or above minApp can download without reinstalling
   content: { build: n, url: `${base}/gemfall-web.zip`, sha256: createHash('sha256').update(readFileSync(zip)).digest('hex'), minApp: policy.minApp, notes: policy.notes || '' },
-  apk: { url: `${base}/Gemfall.apk`, versionCode: n, versionName: `1.${n}` },
+  apk: { url: `${base}/Gemfinity.apk`, versionCode: n, versionName: `1.${n}` },
   // where Google Play installs send players for app updates
   play: { url: `https://play.google.com/store/apps/details?id=${appId}` },
   // apps older than this must install the new APK before they can play

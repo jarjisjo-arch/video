@@ -1,4 +1,4 @@
-// Gemfall level data.
+// Gemfinity level data.
 // Layout legend (one character per cell, 8 columns per row):
 //   .  gem
 //   _  hole (not part of the board)

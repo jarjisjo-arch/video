@@ -1,5 +1,5 @@
-# Builds the Gemfall Android app (APK) and puts it on the "gemfall-latest" release so it can be downloaded and shared.
-name: Build Gemfall Android app
+# Builds the Gemfinity Android app (APK) and puts it on the "gemfall-latest" release so it can be downloaded and shared.
+name: Build Gemfinity Android app
 
 on:
   push:
@@ -43,10 +43,10 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Gemfall-apk
+          name: Gemfinity-apk
           path: |
-            gemfall-android/Gemfall.apk
-            gemfall-android/Gemfall-play*.aab
+            gemfall-android/Gemfinity.apk
+            gemfall-android/Gemfinity-play*.aab
             gemfall-android/gemfall-web.zip
             gemfall-android/update.json
 
@@ -55,14 +55,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          NOTES="Gemfall for Android, version 1.${{ github.run_number }} (built from ${GITHUB_SHA::7}). On an Android phone, download Gemfall.apk, open it and allow the install. Installing a newer version keeps your progress. Gemfall-play.aab is the bundle for uploading to Google Play Console; it can't be installed on a phone directly."
+          NOTES="Gemfinity for Android, version 1.${{ github.run_number }} (built from ${GITHUB_SHA::7}). On an Android phone, download Gemfinity.apk, open it and allow the install. Installing a newer version keeps your progress. Gemfinity-play.aab is the bundle for uploading to Google Play Console; it can't be installed on a phone directly."
           if gh release view gemfall-latest >/dev/null 2>&1; then
-            gh release edit gemfall-latest --notes "$NOTES"
+            gh release edit gemfall-latest --title "Gemfinity for Android" --notes "$NOTES"
           else
-            gh release create gemfall-latest --title "Gemfall for Android" --notes "$NOTES" --target "$GITHUB_SHA"
+            gh release create gemfall-latest --title "Gemfinity for Android" --notes "$NOTES" --target "$GITHUB_SHA"
           fi
           # the app and the content first, then update.json, so the manifest never points at files not uploaded yet
-          gh release upload gemfall-latest gemfall-android/Gemfall.apk gemfall-android/gemfall-web.zip --clobber
+          gh release upload gemfall-latest gemfall-android/Gemfinity.apk gemfall-android/gemfall-web.zip --clobber
+          # files from before the game was renamed from Gemfall
+          for old in Gemfall.apk Gemfall-play.aab; do gh release delete-asset gemfall-latest "$old" -y 2>/dev/null || true; done
           # the signed Google Play bundle, when the upload key is set up
-          if [ -f gemfall-android/Gemfall-play.aab ]; then gh release upload gemfall-latest gemfall-android/Gemfall-play.aab --clobber; fi
+          if [ -f gemfall-android/Gemfinity-play.aab ]; then gh release upload gemfall-latest gemfall-android/Gemfinity-play.aab --clobber; fi
           gh release upload gemfall-latest gemfall-android/update.json --clobber

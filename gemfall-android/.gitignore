@@ -3,8 +3,8 @@ www/
 android/
 gemfall-web.zip
 update.json
-Gemfall.apk
-Gemfall-play.aab
-Gemfall-play-unsigned.aab
+Gemfinity.apk
+Gemfinity-play.aab
+Gemfinity-play-unsigned.aab
 # private signing keys never go in the repository (gemfall-share.keystore is the deliberately shared one)
 *.jks
