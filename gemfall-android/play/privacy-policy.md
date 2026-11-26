@@ -1,6 +1,6 @@
 # Gemfinity privacy policy
 
-Last updated: 25 November 2026
+Last updated: 27 November 2026
 
 Gemfinity is a match-3 puzzle game. This policy explains what happens to information when you play it.
 
@@ -18,7 +18,7 @@ When the Android app starts, it checks for game updates by downloading a small f
 
 ## Permissions
 
-Gemfinity uses one Android permission: internet access, for the update check described above. The game plays offline.
+Gemfinity uses internet access for the update check described above. Android also lists a few standard permissions used by the part of the app that downloads updates in the background: checking whether the phone is online, keeping a download running, and finishing it after the phone restarts. None of these permissions gives the app access to personal information, and the game plays offline.
 
 ## Children
 
