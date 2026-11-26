@@ -55,7 +55,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          NOTES="Gemfall for Android, version 1.${{ github.run_number }} (built from ${GITHUB_SHA::7}). On an Android phone, download Gemfall.apk, open it and allow the install. Installing a newer version keeps your progress."
+          NOTES="Gemfall for Android, version 1.${{ github.run_number }} (built from ${GITHUB_SHA::7}). On an Android phone, download Gemfall.apk, open it and allow the install. Installing a newer version keeps your progress. Gemfall-play.aab is the bundle for uploading to Google Play Console; it can't be installed on a phone directly."
           if gh release view gemfall-latest >/dev/null 2>&1; then
             gh release edit gemfall-latest --notes "$NOTES"
           else
